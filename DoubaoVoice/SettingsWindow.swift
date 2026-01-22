@@ -47,6 +47,7 @@ struct SettingsView: View {
     private let viewModel = TranscriptionViewModel.shared
 
     @State private var showingHotkeyRecorder = false
+    @State private var showingFinishHotkeyRecorder = false
     @State private var tempAppKey = ""
     @State private var tempAccessKey = ""
 
@@ -61,7 +62,8 @@ struct SettingsView: View {
 
                 ControlsSettingsTab(
                     settings: settings,
-                    showingHotkeyRecorder: $showingHotkeyRecorder
+                    showingHotkeyRecorder: $showingHotkeyRecorder,
+                    showingFinishHotkeyRecorder: $showingFinishHotkeyRecorder
                 )
                 .tabItem {
                     Label("Controls", systemImage: "command")
@@ -107,6 +109,18 @@ struct SettingsView: View {
                 },
                 onCancel: {
                     showingHotkeyRecorder = false
+                }
+            )
+        }
+        .sheet(isPresented: $showingFinishHotkeyRecorder) {
+            HotkeyRecorderView(
+                currentHotkey: settings.finishHotkey,
+                onSave: { newHotkey in
+                    settings.finishHotkey = newHotkey
+                    showingFinishHotkeyRecorder = false
+                },
+                onCancel: {
+                    showingFinishHotkeyRecorder = false
                 }
             )
         }
@@ -168,13 +182,14 @@ struct APISettingsTab: View {
 struct ControlsSettingsTab: View {
     @ObservedObject var settings: AppSettings
     @Binding var showingHotkeyRecorder: Bool
+    @Binding var showingFinishHotkeyRecorder: Bool
 
     var body: some View {
         Form {
             Section {
                 HStack {
                     Text("Hotkey:")
-                        .frame(width: 80, alignment: .trailing)
+                        .frame(width: 100, alignment: .trailing)
 
                     Text(settings.globalHotkey.displayString)
                         .font(.system(.body, design: .monospaced))
@@ -192,6 +207,31 @@ struct ControlsSettingsTab: View {
                     .font(.headline)
             } footer: {
                 Text("Press the hotkey to show/hide the transcription window")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            Section {
+                HStack {
+                    Text("Finish & Copy:")
+                        .frame(width: 100, alignment: .trailing)
+
+                    Text(settings.finishHotkey.displayString)
+                        .font(.system(.body, design: .monospaced))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(.thickMaterial)
+                        .cornerRadius(6)
+
+                    Button("Change...") {
+                        showingFinishHotkeyRecorder = true
+                    }
+                }
+            } header: {
+                Text("Window Hotkey")
+                    .font(.headline)
+            } footer: {
+                Text("Press this key to finish recording and copy text (only works when window is active)")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -403,8 +443,9 @@ class HotkeyRecorderNSView: NSView {
             modifiers |= UInt32(controlKey)
         }
 
-        // Require at least one modifier key
-        guard modifiers != 0 else {
+        // For finish hotkey (Enter key), allow no modifiers (local scope)
+        // For global hotkeys, require at least one modifier
+        guard modifiers != 0 || keyCode == 36 else {
             NSSound.beep()
             return
         }

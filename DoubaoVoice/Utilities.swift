@@ -484,6 +484,8 @@ enum UserDefaultsKeys {
     static let rememberWindowPosition = "DoubaoVoice.RememberWindowPosition"
     static let windowPositionX = "DoubaoVoice.WindowPositionX"
     static let windowPositionY = "DoubaoVoice.WindowPositionY"
+    static let finishHotkeyKeyCode = "DoubaoVoice.FinishHotkeyKeyCode"
+    static let finishHotkeyModifiers = "DoubaoVoice.FinishHotkeyModifiers"
 
     static let defaultPort = 18888
 }
@@ -498,6 +500,12 @@ struct HotkeyConfig: Codable, Equatable {
     static let `default` = HotkeyConfig(
         keyCode: 9,  // V key
         modifiers: UInt32(optionKey | cmdKey)
+    )
+
+    // Default finish hotkey: Enter key with no modifiers (local scope)
+    static let defaultFinish = HotkeyConfig(
+        keyCode: 36,  // Enter key
+        modifiers: 0  // No modifiers required (local scope)
     )
 
     var displayString: String {
@@ -596,6 +604,13 @@ class AppSettings: ObservableObject {
         }
     }
 
+    @Published var finishHotkey: HotkeyConfig {
+        didSet {
+            defaults.set(finishHotkey.keyCode, forKey: UserDefaultsKeys.finishHotkeyKeyCode)
+            defaults.set(finishHotkey.modifiers, forKey: UserDefaultsKeys.finishHotkeyModifiers)
+        }
+    }
+
     @Published var rememberWindowPosition: Bool {
         didSet { defaults.set(rememberWindowPosition, forKey: UserDefaultsKeys.rememberWindowPosition) }
     }
@@ -610,6 +625,11 @@ class AppSettings: ObservableObject {
         let keyCode = defaults.object(forKey: UserDefaultsKeys.globalHotkeyKeyCode) as? UInt32 ?? HotkeyConfig.default.keyCode
         let modifiers = defaults.object(forKey: UserDefaultsKeys.globalHotkeyModifiers) as? UInt32 ?? HotkeyConfig.default.modifiers
         self.globalHotkey = HotkeyConfig(keyCode: keyCode, modifiers: modifiers)
+
+        // Load finish hotkey config
+        let finishKeyCode = defaults.object(forKey: UserDefaultsKeys.finishHotkeyKeyCode) as? UInt32 ?? HotkeyConfig.defaultFinish.keyCode
+        let finishModifiers = defaults.object(forKey: UserDefaultsKeys.finishHotkeyModifiers) as? UInt32 ?? HotkeyConfig.defaultFinish.modifiers
+        self.finishHotkey = HotkeyConfig(keyCode: finishKeyCode, modifiers: finishModifiers)
 
         self.rememberWindowPosition = defaults.object(forKey: UserDefaultsKeys.rememberWindowPosition) as? Bool ?? true
 
