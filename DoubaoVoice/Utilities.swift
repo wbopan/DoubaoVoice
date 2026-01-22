@@ -408,7 +408,7 @@ extension Logger {
     static let hotkey = Logger(subsystem: subsystem, category: "Hotkey")
 
     /// Logger for general/uncategorized logs
-    static let general = Logger(subsystem: subsystem, category: "General")
+    nonisolated(unsafe) static let general = Logger(subsystem: subsystem, category: "General")
 }
 
 /// Unified logging function using Apple's OSLog framework
