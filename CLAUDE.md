@@ -53,4 +53,4 @@ logger.debug("Payload compressed: \(size) bytes")
 
 ## Creating Worktrees
 
-To create an worktree, put the worktree in ./worktrees and use `builtin cd` into it. 
+To create an worktree, put the worktree in ./worktrees 

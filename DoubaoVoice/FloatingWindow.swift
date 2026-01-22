@@ -16,7 +16,7 @@ class FloatingWindowController: NSWindowController {
     private var previousActiveApp: NSRunningApplication?
 
     convenience init() {
-        print("DEBUG: FloatingWindowController init() starting")
+        log(.debug, "FloatingWindowController init() starting")
 
         // Create floating window
         let window = FloatingWindow(
@@ -26,7 +26,7 @@ class FloatingWindowController: NSWindowController {
             defer: false
         )
 
-        print("DEBUG: FloatingWindow created")
+        log(.debug, "FloatingWindow created")
 
         window.title = "DoubaoVoice"
         window.titlebarAppearsTransparent = true
@@ -40,26 +40,26 @@ class FloatingWindowController: NSWindowController {
         window.hasShadow = true
         window.alphaValue = 1.0
 
-        print("DEBUG: Window properties set")
+        log(.debug, "Window properties set")
 
         // Create SwiftUI view
         let contentView = FloatingTranscriptionView()
         window.contentView = NSHostingView(rootView: contentView)
 
-        print("DEBUG: Content view set")
+        log(.debug, "Content view set")
 
         // Restore saved position
         if let savedPosition = AppSettings.shared.getSavedWindowPosition() {
             window.setFrameOrigin(savedPosition)
-            print("DEBUG: Restored position to \(savedPosition)")
+            log(.debug, "Restored position to \(savedPosition)")
         } else {
             window.center()
-            print("DEBUG: Centered window")
+            log(.debug, "Centered window")
         }
 
         self.init(window: window)
 
-        print("DEBUG: FloatingWindowController init() completed")
+        log(.debug, "FloatingWindowController init() completed")
 
         // Save position when window moves
         NotificationCenter.default.addObserver(
@@ -95,7 +95,7 @@ class FloatingWindowController: NSWindowController {
     }
 
     override func showWindow(_ sender: Any?) {
-        print("DEBUG: FloatingWindowController.showWindow() called")
+        log(.debug, "FloatingWindowController.showWindow() called")
 
         // Capture the currently active app BEFORE we activate
         previousActiveApp = NSWorkspace.shared.frontmostApplication
@@ -107,29 +107,27 @@ class FloatingWindowController: NSWindowController {
 
         // Ensure window is visible
         guard let window = window else {
-            print("DEBUG: ERROR - Window is nil in showWindow")
             log(.error, "Window is nil in showWindow")
             return
         }
 
-        print("DEBUG: Window exists, frame: \(window.frame)")
+        log(.debug, "Window exists, frame: \(window.frame)")
 
         // Activate the app and show window
         NSApp.activate(ignoringOtherApps: true)
-        print("DEBUG: App activated")
+        log(.debug, "App activated")
 
         window.makeKeyAndOrderFront(nil)
-        print("DEBUG: makeKeyAndOrderFront called")
+        log(.debug, "makeKeyAndOrderFront called")
 
         window.orderFrontRegardless()
-        print("DEBUG: orderFrontRegardless called")
+        log(.debug, "orderFrontRegardless called")
 
-        print("DEBUG: Window shown - frame: \(window.frame), isVisible: \(window.isVisible), isKeyWindow: \(window.isKeyWindow)")
-        log(.info, "Window shown - frame: \(window.frame), isVisible: \(window.isVisible)")
+        log(.info, "Window shown - frame: \(window.frame), isVisible: \(window.isVisible), isKeyWindow: \(window.isKeyWindow)")
 
         // Auto-start recording when window appears
         Task { @MainActor in
-            print("DEBUG: Starting recording task")
+            log(.debug, "Starting recording task")
             if !viewModel.isRecording {
                 viewModel.startRecording()
                 NotificationCenter.default.post(name: .recordingStateChanged, object: nil)

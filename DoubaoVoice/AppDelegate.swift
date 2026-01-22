@@ -111,15 +111,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @MainActor
     @objc private func showWindow() {
-        print("DEBUG: showWindow() called")
+        log(.debug, "showWindow() called")
         if floatingWindowController == nil {
-            print("DEBUG: Creating new FloatingWindowController")
+            log(.debug, "Creating new FloatingWindowController")
             floatingWindowController = FloatingWindowController()
-            print("DEBUG: FloatingWindowController created: \(floatingWindowController != nil)")
+            log(.debug, "FloatingWindowController created: \(floatingWindowController != nil)")
         }
-        print("DEBUG: Calling showWindow on controller")
+        log(.debug, "Calling showWindow on controller")
         floatingWindowController?.showWindow(nil)
-        print("DEBUG: showWindow() completed")
+        log(.debug, "showWindow() completed")
     }
 
     @MainActor
