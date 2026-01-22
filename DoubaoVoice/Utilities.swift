@@ -119,6 +119,32 @@ struct RecordingSession {
     }
 }
 
+/// Window position mode
+enum WindowPositionMode: String, Codable, CaseIterable {
+    case rememberLast = "remember_last"
+    case nearMouse = "near_mouse"
+    case topCenter = "top_center"
+    case bottomCenter = "bottom_center"
+
+    var displayName: String {
+        switch self {
+        case .rememberLast: return "Remember Last Position"
+        case .nearMouse: return "Near Mouse Cursor"
+        case .topCenter: return "Top of Screen"
+        case .bottomCenter: return "Bottom of Screen"
+        }
+    }
+
+    var displayNameChinese: String {
+        switch self {
+        case .rememberLast: return "记忆上次的位置"
+        case .nearMouse: return "出现在鼠标的附近"
+        case .topCenter: return "屏幕的上方"
+        case .bottomCenter: return "屏幕的下方"
+        }
+    }
+}
+
 /// HTTP API response
 struct APIResponse: Codable {
     let status: String
@@ -497,6 +523,7 @@ enum UserDefaultsKeys {
     static let globalHotkeyKeyCode = "DoubaoVoice.GlobalHotkeyKeyCode"
     static let globalHotkeyModifiers = "DoubaoVoice.GlobalHotkeyModifiers"
     static let rememberWindowPosition = "DoubaoVoice.RememberWindowPosition"
+    static let windowPositionMode = "DoubaoVoice.WindowPositionMode"
     static let windowPositionX = "DoubaoVoice.WindowPositionX"
     static let windowPositionY = "DoubaoVoice.WindowPositionY"
     static let finishHotkeyKeyCode = "DoubaoVoice.FinishHotkeyKeyCode"
@@ -628,8 +655,12 @@ class AppSettings: ObservableObject {
         }
     }
 
-    @Published var rememberWindowPosition: Bool {
-        didSet { defaults.set(rememberWindowPosition, forKey: UserDefaultsKeys.rememberWindowPosition) }
+    @Published var windowPositionMode: WindowPositionMode {
+        didSet {
+            if let encoded = try? JSONEncoder().encode(windowPositionMode) {
+                defaults.set(encoded, forKey: UserDefaultsKeys.windowPositionMode)
+            }
+        }
     }
 
     @Published var autoPasteAfterClose: Bool {
@@ -656,7 +687,21 @@ class AppSettings: ObservableObject {
         let finishModifiers = defaults.object(forKey: UserDefaultsKeys.finishHotkeyModifiers) as? UInt32 ?? HotkeyConfig.defaultFinish.modifiers
         self.finishHotkey = HotkeyConfig(keyCode: finishKeyCode, modifiers: finishModifiers)
 
-        self.rememberWindowPosition = defaults.object(forKey: UserDefaultsKeys.rememberWindowPosition) as? Bool ?? true
+        // Load window position mode with migration from old boolean setting
+        if let modeData = defaults.data(forKey: UserDefaultsKeys.windowPositionMode),
+           let mode = try? JSONDecoder().decode(WindowPositionMode.self, from: modeData) {
+            self.windowPositionMode = mode
+        } else if let oldRememberPosition = defaults.object(forKey: UserDefaultsKeys.rememberWindowPosition) as? Bool {
+            // Migrate from old boolean setting: true -> rememberLast, false -> topCenter
+            let migratedMode: WindowPositionMode = oldRememberPosition ? .rememberLast : .topCenter
+            self.windowPositionMode = migratedMode
+            log(.info, "Migrated window position setting from boolean to mode: \(migratedMode.rawValue)")
+            // Remove old key after migration
+            defaults.removeObject(forKey: UserDefaultsKeys.rememberWindowPosition)
+        } else {
+            // Default to rememberLast for new installations
+            self.windowPositionMode = .rememberLast
+        }
 
         self.autoPasteAfterClose = defaults.object(forKey: UserDefaultsKeys.autoPasteAfterClose) as? Bool ?? true
 
@@ -671,7 +716,8 @@ class AppSettings: ObservableObject {
 
     // Get saved window position if available
     func getSavedWindowPosition() -> NSPoint? {
-        guard rememberWindowPosition else { return nil }
+        // Only return saved position if in rememberLast mode
+        guard windowPositionMode == .rememberLast else { return nil }
 
         let x = defaults.object(forKey: UserDefaultsKeys.windowPositionX) as? CGFloat
         let y = defaults.object(forKey: UserDefaultsKeys.windowPositionY) as? CGFloat
@@ -684,7 +730,8 @@ class AppSettings: ObservableObject {
 
     // Save window position
     func saveWindowPosition(_ position: NSPoint) {
-        guard rememberWindowPosition else { return }
+        // Only save position if in rememberLast mode
+        guard windowPositionMode == .rememberLast else { return }
         defaults.set(position.x, forKey: UserDefaultsKeys.windowPositionX)
         defaults.set(position.y, forKey: UserDefaultsKeys.windowPositionY)
     }

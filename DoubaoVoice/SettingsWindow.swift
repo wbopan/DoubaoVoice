@@ -258,6 +258,30 @@ struct ControlsSettingsTab: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
+
+            Section {
+                HStack {
+                    Text("Window position:")
+                        .frame(width: 120, alignment: .trailing)
+
+                    Picker("", selection: $settings.windowPositionMode) {
+                        ForEach(WindowPositionMode.allCases, id: \.self) { mode in
+                            Text(mode.displayName).tag(mode)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 200)
+
+                    Spacer()
+                }
+            } header: {
+                Text("Window Appearance")
+                    .font(.headline)
+            } footer: {
+                Text("Choose where the transcription window appears: Remember Last Position keeps it where you last placed it, Near Mouse Cursor opens it near your cursor, Top/Bottom of Screen centers it at the screen edge.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)

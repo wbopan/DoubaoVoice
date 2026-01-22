@@ -7,6 +7,7 @@
 
 import Cocoa
 import SwiftUI
+import OSLog
 
 // MARK: - Floating Window Controller
 
@@ -14,6 +15,81 @@ class FloatingWindowController: NSWindowController {
     private let viewModel = TranscriptionViewModel.shared
     private let settings = AppSettings.shared
     private var previousActiveApp: NSRunningApplication?
+    private let logger = Logger.ui
+
+    /// Calculate window position based on the selected mode
+    private static func calculateWindowPosition(mode: WindowPositionMode, windowSize: NSSize, settings: AppSettings) -> NSPoint {
+        let logger = Logger.ui
+        logger.info("Calculating window position for mode: \(mode.rawValue)")
+
+        guard let screen = NSScreen.main else {
+            logger.warning("No main screen available, using default position")
+            return NSPoint(x: 100, y: 100)
+        }
+
+        let visibleFrame = screen.visibleFrame
+        logger.debug("Screen visible frame: \(String(describing: visibleFrame))")
+
+        switch mode {
+        case .rememberLast:
+            // Try to load saved position, fallback to center
+            if let savedPosition = settings.getSavedWindowPosition() {
+                logger.info("Using saved window position: \(String(describing: savedPosition))")
+                return savedPosition
+            } else {
+                // Center the window
+                let x = visibleFrame.origin.x + (visibleFrame.width - windowSize.width) / 2
+                let y = visibleFrame.origin.y + (visibleFrame.height - windowSize.height) / 2
+                let position = NSPoint(x: x, y: y)
+                logger.info("No saved position, centering window at: \(String(describing: position))")
+                return position
+            }
+
+        case .nearMouse:
+            // Get mouse position and offset slightly
+            let mouseLocation = NSEvent.mouseLocation
+            let offset: CGFloat = 20
+            let margin: CGFloat = 10
+
+            var x = mouseLocation.x + offset
+            var y = mouseLocation.y - offset
+
+            // Boundary check: keep window within screen with margin
+            if x + windowSize.width + margin > visibleFrame.maxX {
+                x = mouseLocation.x - offset - windowSize.width
+            }
+            if x < visibleFrame.minX + margin {
+                x = visibleFrame.minX + margin
+            }
+
+            if y < visibleFrame.minY + margin {
+                y = mouseLocation.y + offset
+            }
+            if y + windowSize.height + margin > visibleFrame.maxY {
+                y = visibleFrame.maxY - windowSize.height - margin
+            }
+
+            let position = NSPoint(x: x, y: y)
+            logger.info("Positioning near mouse at: \(String(describing: position)) (mouse: \(String(describing: mouseLocation)))")
+            return position
+
+        case .topCenter:
+            // Horizontal center, near top with margin for menu bar and notch
+            let x = visibleFrame.origin.x + (visibleFrame.width - windowSize.width) / 2
+            let y = visibleFrame.maxY - windowSize.height - 50
+            let position = NSPoint(x: x, y: y)
+            logger.info("Positioning at top center: \(String(describing: position))")
+            return position
+
+        case .bottomCenter:
+            // Horizontal center, near bottom with margin for Dock
+            let x = visibleFrame.origin.x + (visibleFrame.width - windowSize.width) / 2
+            let y = visibleFrame.minY + 50
+            let position = NSPoint(x: x, y: y)
+            logger.info("Positioning at bottom center: \(String(describing: position))")
+            return position
+        }
+    }
 
     convenience init() {
         log(.debug, "FloatingWindowController init() starting")
@@ -48,14 +124,12 @@ class FloatingWindowController: NSWindowController {
 
         log(.debug, "Content view set")
 
-        // Restore saved position
-        if let savedPosition = AppSettings.shared.getSavedWindowPosition() {
-            window.setFrameOrigin(savedPosition)
-            log(.debug, "Restored position to \(savedPosition)")
-        } else {
-            window.center()
-            log(.debug, "Centered window")
-        }
+        // Calculate and set window position based on mode
+        let settings = AppSettings.shared
+        let mode = settings.windowPositionMode
+        let position = Self.calculateWindowPosition(mode: mode, windowSize: window.frame.size, settings: settings)
+        window.setFrameOrigin(position)
+        log(.debug, "Window positioned using mode \(mode.rawValue) at \(position)")
 
         self.init(window: window)
 
@@ -101,6 +175,20 @@ class FloatingWindowController: NSWindowController {
         previousActiveApp = NSWorkspace.shared.frontmostApplication
         if let app = previousActiveApp {
             log(.debug, "Captured previous active app: \(app.localizedName ?? "Unknown")")
+        }
+
+        // Recalculate window position based on current mode (except for rememberLast)
+        if let window = window {
+            let mode = settings.windowPositionMode
+            // Only reposition if not in rememberLast mode
+            // In rememberLast mode, keep the window where it was last positioned
+            if mode != .rememberLast {
+                let position = Self.calculateWindowPosition(mode: mode, windowSize: window.frame.size, settings: settings)
+                window.setFrameOrigin(position)
+                log(.debug, "Repositioned window using mode \(mode.rawValue) at \(String(describing: position))")
+            } else {
+                log(.debug, "Using rememberLast mode, keeping window at current position")
+            }
         }
 
         super.showWindow(sender)
