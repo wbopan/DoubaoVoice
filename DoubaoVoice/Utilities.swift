@@ -10,6 +10,7 @@ import Compression
 import zlib
 import Combine
 import AppKit
+import OSLog
 
 // MARK: - Constants
 
@@ -373,10 +374,11 @@ extension Data {
 
 // MARK: - Logging
 
+/// Log levels for categorizing log messages
 enum LogLevel {
     case debug, info, warning, error
 
-    var prefix: String {
+    nonisolated var prefix: String {
         switch self {
         case .debug: return "🔍"
         case .info: return "ℹ️"
@@ -386,9 +388,73 @@ enum LogLevel {
     }
 }
 
+/// Logger extensions with categorized loggers for different subsystems
+extension Logger {
+    private nonisolated(unsafe) static let subsystem = Bundle.main.bundleIdentifier ?? "com.doubaovoice"
+
+    /// Logger for audio recording and processing
+    static let audio = Logger(subsystem: subsystem, category: "Audio")
+
+    /// Logger for ASR (Automatic Speech Recognition) operations
+    static let asr = Logger(subsystem: subsystem, category: "ASR")
+
+    /// Logger for UI and window management
+    static let ui = Logger(subsystem: subsystem, category: "UI")
+
+    /// Logger for network/WebSocket operations
+    static let network = Logger(subsystem: subsystem, category: "Network")
+
+    /// Logger for hotkey and system events
+    static let hotkey = Logger(subsystem: subsystem, category: "Hotkey")
+
+    /// Logger for general/uncategorized logs
+    static let general = Logger(subsystem: subsystem, category: "General")
+}
+
+/// Unified logging function using Apple's OSLog framework
+///
+/// This function provides backward compatibility while using the modern Logger API.
+/// Logs are integrated with macOS Console.app and can be filtered by subsystem and category.
+///
+/// Usage:
+/// ```swift
+/// log(.info, "Starting transcription session...")
+/// log(.error, "Failed to connect: \(error)")
+/// log(.debug, "Audio buffer size: \(bufferSize) bytes")
+/// ```
+///
+/// To view logs in Console.app:
+/// 1. Open Console.app
+/// 2. Filter by process: "DoubaoVoice"
+/// 3. Filter by subsystem: "com.doubaovoice"
+///
+/// To view logs in terminal:
+/// ```bash
+/// log stream --predicate 'subsystem == "com.doubaovoice"'
+/// log stream --predicate 'subsystem == "com.doubaovoice" AND category == "ASR"'
+/// ```
 nonisolated func log(_ level: LogLevel, _ message: String, file: String = #file, line: Int = #line) {
     let filename = (file as NSString).lastPathComponent
-    print("[\(level.prefix)] \(filename):\(line) - \(message)")
+    let logger = Logger.general
+
+    // Format the message with file and line information
+    let formattedMessage = "\(filename):\(line) - \(message)"
+
+    switch level {
+    case .debug:
+        logger.debug("\(formattedMessage, privacy: .public)")
+    case .info:
+        logger.info("\(formattedMessage, privacy: .public)")
+    case .warning:
+        logger.warning("\(formattedMessage, privacy: .public)")
+    case .error:
+        logger.error("\(formattedMessage, privacy: .public)")
+    }
+
+    // Also print to console for development convenience
+    #if DEBUG
+    print("[\(level.prefix)] \(formattedMessage)")
+    #endif
 }
 
 // MARK: - Helper Extensions
