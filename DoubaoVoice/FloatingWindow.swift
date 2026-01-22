@@ -69,6 +69,29 @@ class FloatingWindowController: NSWindowController {
         ) { [weak self] _ in
             self?.saveWindowPosition()
         }
+
+        // Always stop recording when window becomes hidden (defense-in-depth)
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: window,
+            queue: .main
+        ) { [weak self] notification in
+            guard let self = self else { return }
+            self.ensureRecordingStopped()
+        }
+
+        // Observe when window is hidden/ordered out
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.didResignKeyNotification,
+            object: window,
+            queue: .main
+        ) { [weak self] notification in
+            guard let self = self else { return }
+            // Only stop if window is actually becoming hidden
+            if self.window?.isVisible == false {
+                self.ensureRecordingStopped()
+            }
+        }
     }
 
     override func showWindow(_ sender: Any?) {
@@ -118,15 +141,21 @@ class FloatingWindowController: NSWindowController {
 
     func hideWindow() {
         // Stop recording when window hides
+        ensureRecordingStopped()
+
+        window?.orderOut(nil)
+        log(.info, "Floating window hidden, recording stopped")
+    }
+
+    private func ensureRecordingStopped() {
+        // Always stop recording when window becomes hidden, regardless of how it was hidden
         Task { @MainActor in
             if viewModel.isRecording {
+                log(.debug, "Stopping recording due to window hide")
                 viewModel.stopRecording()
                 NotificationCenter.default.post(name: .recordingStateChanged, object: nil)
             }
         }
-
-        window?.orderOut(nil)
-        log(.info, "Floating window hidden, recording stopped")
     }
 
     private func saveWindowPosition() {
