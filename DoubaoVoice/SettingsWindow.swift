@@ -44,6 +44,7 @@ struct SettingsView: View {
     private let viewModel = TranscriptionViewModel.shared
 
     @State private var showingHotkeyRecorder = false
+    @State private var showingFinishHotkeyRecorder = false
     @State private var tempAppKey = ""
     @State private var tempAccessKey = ""
     @State private var tempResourceID = ""
@@ -86,6 +87,33 @@ struct SettingsView: View {
                     }
 
                     Text("Press the hotkey to show/hide the transcription window")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.leading, 100)
+                }
+
+                Divider()
+                    .padding(.vertical, 8)
+
+                // Finish Hotkey Section
+                Section(header: Text("Window Hotkey").font(.headline)) {
+                    HStack {
+                        Text("Finish & Copy:")
+                            .frame(width: 100, alignment: .trailing)
+
+                        Text(settings.finishHotkey.displayString)
+                            .font(.system(.body, design: .monospaced))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color(.controlBackgroundColor))
+                            .cornerRadius(6)
+
+                        Button("Change...") {
+                            showingFinishHotkeyRecorder = true
+                        }
+                    }
+
+                    Text("Press this key to finish recording and copy text (only works when window is active)")
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .padding(.leading, 100)
@@ -144,6 +172,18 @@ struct SettingsView: View {
                 },
                 onCancel: {
                     showingHotkeyRecorder = false
+                }
+            )
+        }
+        .sheet(isPresented: $showingFinishHotkeyRecorder) {
+            HotkeyRecorderView(
+                currentHotkey: settings.finishHotkey,
+                onSave: { newHotkey in
+                    settings.finishHotkey = newHotkey
+                    showingFinishHotkeyRecorder = false
+                },
+                onCancel: {
+                    showingFinishHotkeyRecorder = false
                 }
             )
         }
@@ -331,8 +371,9 @@ class HotkeyRecorderNSView: NSView {
             modifiers |= UInt32(controlKey)
         }
 
-        // Require at least one modifier key
-        guard modifiers != 0 else {
+        // For finish hotkey (Enter key), allow no modifiers (local scope)
+        // For global hotkeys, require at least one modifier
+        guard modifiers != 0 || keyCode == 36 else {
             NSSound.beep()
             return
         }

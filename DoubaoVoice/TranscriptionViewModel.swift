@@ -9,6 +9,7 @@ import Foundation
 import SwiftUI
 import AVFoundation
 import Combine
+import AppKit  // For NSPasteboard
 
 /// View model for managing transcription state and coordinating services
 @MainActor
@@ -144,6 +145,37 @@ class TranscriptionViewModel: ObservableObject {
                 log(.error, "Stop recording error: \(error)")
             }
         }
+    }
+
+    /// Finish recording, wait for final result, and copy to clipboard
+    func finishRecordingAndCopy() async -> Bool {
+        guard isRecording else { return false }
+
+        log(.info, "Finishing transcription with copy to clipboard...")
+        statusMessage = "Finishing..."
+
+        // Stop recording (reuse existing logic)
+        await stopRecording()
+
+        // Copy to clipboard if we have text
+        guard !transcribedText.isEmpty else {
+            log(.warning, "No text to copy to clipboard")
+            return false
+        }
+
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        let success = pasteboard.setString(transcribedText, forType: .string)
+
+        if success {
+            log(.info, "Transcribed text copied to clipboard (\(transcribedText.count) chars)")
+            statusMessage = "Copied to clipboard"
+        } else {
+            log(.error, "Failed to copy text to clipboard")
+            errorMessage = "Failed to copy to clipboard"
+        }
+
+        return success
     }
 
     /// Toggle recording state

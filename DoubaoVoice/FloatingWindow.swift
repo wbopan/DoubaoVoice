@@ -130,18 +130,78 @@ class FloatingWindowController: NSWindowController {
 // MARK: - Floating Window Class
 
 class FloatingWindow: NSPanel {
+    private var localEventMonitor: Any?
+
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
 
-    override func keyDown(with event: NSEvent) {
-        // Handle Escape key to hide window
-        if event.keyCode == 53 { // Escape key
-            if let controller = windowController as? FloatingWindowController {
-                controller.hideWindow()
+    override func becomeKey() {
+        super.becomeKey()
+        setupLocalEventMonitor()
+    }
+
+    override func resignKey() {
+        super.resignKey()
+        removeLocalEventMonitor()
+    }
+
+    private func setupLocalEventMonitor() {
+        removeLocalEventMonitor()
+
+        let finishConfig = AppSettings.shared.finishHotkey
+
+        localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self = self else { return event }
+
+            // Handle Escape key for closing (works always)
+            if event.keyCode == 53 {
+                if let controller = self.windowController as? FloatingWindowController {
+                    controller.hideWindow()
+                }
+                return nil
             }
-        } else {
-            super.keyDown(with: event)
+
+            // Handle finish hotkey (only when recording)
+            guard TranscriptionViewModel.shared.isRecording else {
+                return event
+            }
+
+            if event.keyCode == UInt16(finishConfig.keyCode) {
+                let expectedModifiers = finishConfig.modifiers
+                var actualModifiers: UInt32 = 0
+
+                if event.modifierFlags.contains(.command) {
+                    actualModifiers |= UInt32(cmdKey)
+                }
+                if event.modifierFlags.contains(.option) {
+                    actualModifiers |= UInt32(optionKey)
+                }
+                if event.modifierFlags.contains(.shift) {
+                    actualModifiers |= UInt32(shiftKey)
+                }
+                if event.modifierFlags.contains(.control) {
+                    actualModifiers |= UInt32(controlKey)
+                }
+
+                if actualModifiers == expectedModifiers {
+                    NotificationCenter.default.post(name: .finishRecordingRequested, object: nil)
+                    return nil
+                }
+            }
+
+            return event
         }
+    }
+
+    private func removeLocalEventMonitor() {
+        if let monitor = localEventMonitor {
+            NSEvent.removeMonitor(monitor)
+            localEventMonitor = nil
+        }
+    }
+
+    deinit {
+        removeLocalEventMonitor()
     }
 }
 
@@ -163,6 +223,19 @@ struct FloatingTranscriptionView: View {
                     .foregroundColor(.secondary)
 
                 Spacer()
+
+                // Finish button (only show when recording)
+                if viewModel.isRecording {
+                    Button(action: {
+                        finishRecording()
+                    }) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                            .imageScale(.small)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Finish and copy (\(AppSettings.shared.finishHotkey.displayString))")
+                }
 
                 // Close button
                 Button(action: {
@@ -231,6 +304,9 @@ struct FloatingTranscriptionView: View {
             }
         }
         .frame(minWidth: 300, minHeight: 200)
+        .onReceive(NotificationCenter.default.publisher(for: .finishRecordingRequested)) { _ in
+            finishRecording()
+        }
     }
 
     private var statusColor: Color {
@@ -252,9 +328,29 @@ struct FloatingTranscriptionView: View {
             controller.hideWindow()
         }
     }
+
+    private func finishRecording() {
+        Task {
+            let success = await viewModel.finishRecordingAndCopy()
+
+            // Give brief moment for user to see "Copied" status
+            if success {
+                try? await Task.sleep(nanoseconds: 300_000_000) // 300ms
+            }
+
+            // Close window
+            closeWindow()
+        }
+    }
 }
 
 #Preview {
     FloatingTranscriptionView()
         .frame(width: 400, height: 300)
+}
+
+// MARK: - Notification Extensions
+
+extension Notification.Name {
+    static let finishRecordingRequested = Notification.Name("finishRecordingRequested")
 }
