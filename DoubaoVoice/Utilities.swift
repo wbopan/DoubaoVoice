@@ -581,8 +581,8 @@ class AppSettings: ObservableObject {
         didSet { defaults.set(accessKey, forKey: UserDefaultsKeys.accessKey) }
     }
 
-    @Published var resourceID: String {
-        didSet { defaults.set(resourceID, forKey: UserDefaultsKeys.resourceID) }
+    var resourceID: String {
+        DoubaoConstants.resourceID
     }
 
     @Published var enableVAD: Bool {
@@ -604,7 +604,6 @@ class AppSettings: ObservableObject {
         // Load saved values or use defaults (from reference.py credentials)
         self.appKey = defaults.string(forKey: UserDefaultsKeys.appKey) ?? "3254061168"
         self.accessKey = defaults.string(forKey: UserDefaultsKeys.accessKey) ?? "1jFY86tc4aNrg-8K69dIM43HSjJ_jhyb"
-        self.resourceID = defaults.string(forKey: UserDefaultsKeys.resourceID) ?? DoubaoConstants.resourceID
         self.enableVAD = defaults.object(forKey: UserDefaultsKeys.enableVAD) as? Bool ?? true
 
         // Load hotkey config
@@ -613,6 +612,12 @@ class AppSettings: ObservableObject {
         self.globalHotkey = HotkeyConfig(keyCode: keyCode, modifiers: modifiers)
 
         self.rememberWindowPosition = defaults.object(forKey: UserDefaultsKeys.rememberWindowPosition) as? Bool ?? true
+
+        // Migrate: Remove deprecated resourceID setting
+        if defaults.object(forKey: UserDefaultsKeys.resourceID) != nil {
+            defaults.removeObject(forKey: UserDefaultsKeys.resourceID)
+            log(.info, "Migrated: Removed deprecated resourceID from UserDefaults")
+        }
     }
 
     // Get saved window position if available

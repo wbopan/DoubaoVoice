@@ -14,8 +14,8 @@ import Carbon
 class SettingsWindowController: NSWindowController {
     convenience init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 500, height: 450),
-            styleMask: [.titled, .closable],
+            contentRect: NSRect(x: 0, y: 0, width: 550, height: 500),
+            styleMask: [.titled, .closable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
@@ -23,6 +23,9 @@ class SettingsWindowController: NSWindowController {
         window.title = "Settings"
         window.center()
         window.isReleasedWhenClosed = false
+        window.titlebarAppearsTransparent = true
+        window.isOpaque = false
+        window.backgroundColor = .clear
 
         // Create SwiftUI view
         let contentView = SettingsView()
@@ -46,71 +49,30 @@ struct SettingsView: View {
     @State private var showingHotkeyRecorder = false
     @State private var tempAppKey = ""
     @State private var tempAccessKey = ""
-    @State private var tempResourceID = ""
 
     var body: some View {
         VStack(spacing: 0) {
-            // Settings form
-            Form {
-                // API Configuration Section
-                Section(header: Text("API Configuration").font(.headline)) {
-                    TextField("App Key:", text: $tempAppKey)
-                        .textFieldStyle(.roundedBorder)
-
-                    SecureField("Access Key:", text: $tempAccessKey)
-                        .textFieldStyle(.roundedBorder)
-
-                    TextField("Resource ID:", text: $tempResourceID)
-                        .textFieldStyle(.roundedBorder)
-                }
-
-                Divider()
-                    .padding(.vertical, 8)
-
-                // Hotkey Section
-                Section(header: Text("Global Hotkey").font(.headline)) {
-                    HStack {
-                        Text("Hotkey:")
-                            .frame(width: 100, alignment: .trailing)
-
-                        Text(settings.globalHotkey.displayString)
-                            .font(.system(.body, design: .monospaced))
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(Color(.controlBackgroundColor))
-                            .cornerRadius(6)
-
-                        Button("Change...") {
-                            showingHotkeyRecorder = true
-                        }
+            // Tabbed interface
+            TabView {
+                APISettingsTab(appKey: $tempAppKey, accessKey: $tempAccessKey)
+                    .tabItem {
+                        Label("API", systemImage: "key.fill")
                     }
 
-                    Text("Press the hotkey to show/hide the transcription window")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .padding(.leading, 100)
+                ControlsSettingsTab(
+                    settings: settings,
+                    showingHotkeyRecorder: $showingHotkeyRecorder
+                )
+                .tabItem {
+                    Label("Controls", systemImage: "command")
                 }
 
-                Divider()
-                    .padding(.vertical, 8)
-
-                // Recording Section
-                Section(header: Text("Recording").font(.headline)) {
-                    Toggle("Enable Voice Activity Detection (VAD)", isOn: $settings.enableVAD)
-                        .padding(.leading, 100)
-                }
-
-                Divider()
-                    .padding(.vertical, 8)
-
-                // Window Section
-                Section(header: Text("Window").font(.headline)) {
-                    Toggle("Remember window position", isOn: $settings.rememberWindowPosition)
-                        .padding(.leading, 100)
-                }
+                AboutTab()
+                    .tabItem {
+                        Label("About", systemImage: "info.circle")
+                    }
             }
-            .padding(20)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.top, 8)
 
             // Bottom button bar
             Divider()
@@ -130,6 +92,7 @@ struct SettingsView: View {
             }
             .padding()
         }
+        .background(.thickMaterial)
         .sheet(isPresented: $showingHotkeyRecorder) {
             HotkeyRecorderView(
                 currentHotkey: settings.globalHotkey,
@@ -151,7 +114,6 @@ struct SettingsView: View {
             // Load current settings
             tempAppKey = settings.appKey
             tempAccessKey = settings.accessKey
-            tempResourceID = settings.resourceID
         }
     }
 
@@ -159,7 +121,6 @@ struct SettingsView: View {
         // Save settings
         settings.appKey = tempAppKey
         settings.accessKey = tempAccessKey
-        settings.resourceID = tempResourceID
 
         // Update view model config
         viewModel.updateConfig(settings: settings)
@@ -171,6 +132,117 @@ struct SettingsView: View {
         if let window = NSApp.keyWindow {
             window.close()
         }
+    }
+}
+
+// MARK: - API Settings Tab
+
+struct APISettingsTab: View {
+    @Binding var appKey: String
+    @Binding var accessKey: String
+
+    var body: some View {
+        Form {
+            Section {
+                TextField("App Key:", text: $appKey)
+                    .textFieldStyle(.roundedBorder)
+
+                SecureField("Access Key:", text: $accessKey)
+                    .textFieldStyle(.roundedBorder)
+            } header: {
+                Text("Doubao API Credentials")
+                    .font(.headline)
+            } footer: {
+                Text("Obtain credentials from the Doubao console at console.volcengine.com")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+    }
+}
+
+// MARK: - Controls Settings Tab
+
+struct ControlsSettingsTab: View {
+    @ObservedObject var settings: AppSettings
+    @Binding var showingHotkeyRecorder: Bool
+
+    var body: some View {
+        Form {
+            Section {
+                HStack {
+                    Text("Hotkey:")
+                        .frame(width: 80, alignment: .trailing)
+
+                    Text(settings.globalHotkey.displayString)
+                        .font(.system(.body, design: .monospaced))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(.thickMaterial)
+                        .cornerRadius(6)
+
+                    Button("Change...") {
+                        showingHotkeyRecorder = true
+                    }
+                }
+            } header: {
+                Text("Global Hotkey")
+                    .font(.headline)
+            } footer: {
+                Text("Press the hotkey to show/hide the transcription window")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            Section {
+                Toggle("Enable Voice Activity Detection", isOn: $settings.enableVAD)
+            } header: {
+                Text("Recording")
+                    .font(.headline)
+            } footer: {
+                Text("VAD automatically detects when you start and stop speaking")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+    }
+}
+
+// MARK: - About Tab
+
+struct AboutTab: View {
+    private let appName = Bundle.main.infoDictionary?["CFBundleName"] as? String ?? "DoubaoVoice"
+    private let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Spacer()
+
+            Image(systemName: "waveform.circle.fill")
+                .font(.system(size: 64))
+                .foregroundColor(.accentColor)
+
+            Text(appName)
+                .font(.title)
+                .fontWeight(.semibold)
+
+            Text("Version \(appVersion)")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+
+            Text("Real-time speech-to-text transcription using the Doubao ASR API")
+                .font(.body)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 40)
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
@@ -209,7 +281,7 @@ struct HotkeyRecorderView: View {
             }
             .frame(minWidth: 150, minHeight: 60)
             .frame(maxWidth: .infinity)
-            .background(Color(.controlBackgroundColor))
+            .background(.thickMaterial)
             .cornerRadius(8)
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
@@ -347,5 +419,5 @@ class HotkeyRecorderNSView: NSView {
 
 #Preview {
     SettingsView()
-        .frame(width: 500, height: 450)
+        .frame(width: 550, height: 500)
 }
