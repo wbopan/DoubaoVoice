@@ -8,6 +8,8 @@
 import Foundation
 import Compression
 import zlib
+import Combine
+import AppKit
 
 // MARK: - Constants
 
@@ -411,6 +413,159 @@ enum UserDefaultsKeys {
     static let resourceID = "DoubaoVoice.ResourceID"
     static let httpPort = "DoubaoVoice.HTTPPort"
     static let enableVAD = "DoubaoVoice.EnableVAD"
+    static let globalHotkeyKeyCode = "DoubaoVoice.GlobalHotkeyKeyCode"
+    static let globalHotkeyModifiers = "DoubaoVoice.GlobalHotkeyModifiers"
+    static let rememberWindowPosition = "DoubaoVoice.RememberWindowPosition"
+    static let windowPositionX = "DoubaoVoice.WindowPositionX"
+    static let windowPositionY = "DoubaoVoice.WindowPositionY"
 
     static let defaultPort = 18888
+}
+
+// MARK: - Hotkey Configuration
+
+struct HotkeyConfig: Codable, Equatable {
+    let keyCode: UInt32
+    let modifiers: UInt32
+
+    // Default: Option+Command+V
+    static let `default` = HotkeyConfig(
+        keyCode: 9,  // V key
+        modifiers: UInt32(optionKey | cmdKey)
+    )
+
+    var displayString: String {
+        var parts: [String] = []
+
+        if modifiers & UInt32(controlKey) != 0 {
+            parts.append("⌃")
+        }
+        if modifiers & UInt32(optionKey) != 0 {
+            parts.append("⌥")
+        }
+        if modifiers & UInt32(shiftKey) != 0 {
+            parts.append("⇧")
+        }
+        if modifiers & UInt32(cmdKey) != 0 {
+            parts.append("⌘")
+        }
+
+        // Map common key codes to symbols
+        let keyString = keyCodeToString(keyCode)
+        parts.append(keyString)
+
+        return parts.joined()
+    }
+
+    private func keyCodeToString(_ code: UInt32) -> String {
+        switch code {
+        case 0: return "A"
+        case 1: return "S"
+        case 2: return "D"
+        case 3: return "F"
+        case 4: return "H"
+        case 5: return "G"
+        case 6: return "Z"
+        case 7: return "X"
+        case 8: return "C"
+        case 9: return "V"
+        case 11: return "B"
+        case 12: return "Q"
+        case 13: return "W"
+        case 14: return "E"
+        case 15: return "R"
+        case 16: return "Y"
+        case 17: return "T"
+        case 31: return "O"
+        case 32: return "U"
+        case 34: return "I"
+        case 35: return "P"
+        case 37: return "L"
+        case 38: return "J"
+        case 40: return "K"
+        case 45: return "N"
+        case 46: return "M"
+        case 49: return "Space"
+        case 36: return "⏎"
+        case 51: return "⌫"
+        case 53: return "⎋"
+        default: return "[\(code)]"
+        }
+    }
+}
+
+// Carbon key modifier constants
+let controlKey: Int = 1 << 12
+let optionKey: Int = 1 << 11
+let shiftKey: Int = 1 << 9
+let cmdKey: Int = 1 << 8
+
+// MARK: - App Settings
+
+class AppSettings: ObservableObject {
+    static let shared = AppSettings()
+
+    private let defaults = UserDefaults.standard
+
+    @Published var appKey: String {
+        didSet { defaults.set(appKey, forKey: UserDefaultsKeys.appKey) }
+    }
+
+    @Published var accessKey: String {
+        didSet { defaults.set(accessKey, forKey: UserDefaultsKeys.accessKey) }
+    }
+
+    @Published var resourceID: String {
+        didSet { defaults.set(resourceID, forKey: UserDefaultsKeys.resourceID) }
+    }
+
+    @Published var enableVAD: Bool {
+        didSet { defaults.set(enableVAD, forKey: UserDefaultsKeys.enableVAD) }
+    }
+
+    @Published var globalHotkey: HotkeyConfig {
+        didSet {
+            defaults.set(globalHotkey.keyCode, forKey: UserDefaultsKeys.globalHotkeyKeyCode)
+            defaults.set(globalHotkey.modifiers, forKey: UserDefaultsKeys.globalHotkeyModifiers)
+        }
+    }
+
+    @Published var rememberWindowPosition: Bool {
+        didSet { defaults.set(rememberWindowPosition, forKey: UserDefaultsKeys.rememberWindowPosition) }
+    }
+
+    private init() {
+        // Load saved values or use defaults (from reference.py credentials)
+        self.appKey = defaults.string(forKey: UserDefaultsKeys.appKey) ?? "3254061168"
+        self.accessKey = defaults.string(forKey: UserDefaultsKeys.accessKey) ?? "1jFY86tc4aNrg-8K69dIM43HSjJ_jhyb"
+        self.resourceID = defaults.string(forKey: UserDefaultsKeys.resourceID) ?? DoubaoConstants.resourceID
+        self.enableVAD = defaults.object(forKey: UserDefaultsKeys.enableVAD) as? Bool ?? true
+
+        // Load hotkey config
+        let keyCode = defaults.object(forKey: UserDefaultsKeys.globalHotkeyKeyCode) as? UInt32 ?? HotkeyConfig.default.keyCode
+        let modifiers = defaults.object(forKey: UserDefaultsKeys.globalHotkeyModifiers) as? UInt32 ?? HotkeyConfig.default.modifiers
+        self.globalHotkey = HotkeyConfig(keyCode: keyCode, modifiers: modifiers)
+
+        self.rememberWindowPosition = defaults.object(forKey: UserDefaultsKeys.rememberWindowPosition) as? Bool ?? true
+    }
+
+    // Get saved window position if available
+    func getSavedWindowPosition() -> NSPoint? {
+        guard rememberWindowPosition else { return nil }
+
+        let x = defaults.object(forKey: UserDefaultsKeys.windowPositionX) as? CGFloat
+        let y = defaults.object(forKey: UserDefaultsKeys.windowPositionY) as? CGFloat
+
+        if let x = x, let y = y {
+            return NSPoint(x: x, y: y)
+        }
+        return nil
+    }
+
+    // Save window position
+    func saveWindowPosition(_ position: NSPoint) {
+        guard rememberWindowPosition else { return }
+        defaults.set(position.x, forKey: UserDefaultsKeys.windowPositionX)
+        defaults.set(position.y, forKey: UserDefaultsKeys.windowPositionY)
+    }
 }
