@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct ContentView: View {
-    @StateObject private var viewModel = TranscriptionViewModel()
+    @ObservedObject private var viewModel = TranscriptionViewModel.shared
 
     var body: some View {
         VStack(spacing: 20) {

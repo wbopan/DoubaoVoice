@@ -2,16 +2,18 @@
 //  DoubaoVoiceApp.swift
 //  DoubaoVoice
 //
-//  Created by 潘文博 on 2026/1/22.
+//  Menu bar app entry point
 //
 
 import SwiftUI
 
 @main
 struct DoubaoVoiceApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+
     var body: some Scene {
-        WindowGroup {
-            ContentView()
+        Settings {
+            EmptyView()
         }
     }
 }
