@@ -469,6 +469,21 @@ extension String {
     var isNotEmpty: Bool {
         return !isEmpty
     }
+
+    /// Remove trailing punctuation (both full-width and half-width)
+    /// Full-width: 。！？；：，、
+    /// Half-width: . ! ? ; : ,
+    func removingTrailingPunctuation() -> String {
+        let fullWidthPunctuation: Set<Character> = ["。", "！", "？", "；", "：", "，", "、"]
+        let halfWidthPunctuation: Set<Character> = [".", "!", "?", ";", ":", ","]
+        let allPunctuation = fullWidthPunctuation.union(halfWidthPunctuation)
+
+        var result = self
+        while let lastChar = result.last, allPunctuation.contains(lastChar) {
+            result.removeLast()
+        }
+        return result
+    }
 }
 
 // MARK: - UserDefaults Keys
@@ -487,6 +502,7 @@ enum UserDefaultsKeys {
     static let finishHotkeyKeyCode = "DoubaoVoice.FinishHotkeyKeyCode"
     static let finishHotkeyModifiers = "DoubaoVoice.FinishHotkeyModifiers"
     static let autoPasteAfterClose = "DoubaoVoice.AutoPasteAfterClose"
+    static let removeTrailingPunctuation = "DoubaoVoice.RemoveTrailingPunctuation"
 
     static let defaultPort = 18888
 }
@@ -620,6 +636,10 @@ class AppSettings: ObservableObject {
         didSet { defaults.set(autoPasteAfterClose, forKey: UserDefaultsKeys.autoPasteAfterClose) }
     }
 
+    @Published var removeTrailingPunctuation: Bool {
+        didSet { defaults.set(removeTrailingPunctuation, forKey: UserDefaultsKeys.removeTrailingPunctuation) }
+    }
+
     private init() {
         // Load saved values or use defaults (from reference.py credentials)
         self.appKey = defaults.string(forKey: UserDefaultsKeys.appKey) ?? "3254061168"
@@ -639,6 +659,8 @@ class AppSettings: ObservableObject {
         self.rememberWindowPosition = defaults.object(forKey: UserDefaultsKeys.rememberWindowPosition) as? Bool ?? true
 
         self.autoPasteAfterClose = defaults.object(forKey: UserDefaultsKeys.autoPasteAfterClose) as? Bool ?? true
+
+        self.removeTrailingPunctuation = defaults.object(forKey: UserDefaultsKeys.removeTrailingPunctuation) as? Bool ?? false
 
         // Migrate: Remove deprecated resourceID setting
         if defaults.object(forKey: UserDefaultsKeys.resourceID) != nil {

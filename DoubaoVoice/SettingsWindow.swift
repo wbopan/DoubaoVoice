@@ -249,11 +249,12 @@ struct ControlsSettingsTab: View {
 
             Section {
                 Toggle("Auto-paste after finish", isOn: $settings.autoPasteAfterClose)
+                Toggle("Remove trailing punctuation", isOn: $settings.removeTrailingPunctuation)
             } header: {
                 Text("Behavior")
                     .font(.headline)
             } footer: {
-                Text("Automatically paste transcribed text into the previous application when using the finish action")
+                Text("Automatically paste transcribed text into the previous application when using the finish action. Remove trailing punctuation removes both full-width (。！？) and half-width (. ! ?) punctuation marks from the end of the transcribed text.")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }

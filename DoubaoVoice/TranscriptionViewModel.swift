@@ -222,20 +222,27 @@ class TranscriptionViewModel: ObservableObject {
 
             // Update transcribed text
             if result.text.isNotEmpty {
+                // Apply post-processing
+                var processedText = result.text
+                if AppSettings.shared.removeTrailingPunctuation {
+                    processedText = processedText.removingTrailingPunctuation()
+                    log(.debug, "Applied punctuation removal: '\(result.text)' -> '\(processedText)'")
+                }
+
                 // For real-time updates, append new text
                 if transcribedText.isEmpty {
-                    transcribedText = result.text
+                    transcribedText = processedText
                 } else {
                     // Replace or append based on whether it's a final result
                     if result.isLastPackage {
-                        transcribedText = result.text
+                        transcribedText = processedText
                     } else {
                         // For interim results, just replace with the latest
-                        transcribedText = result.text
+                        transcribedText = processedText
                     }
                 }
 
-                log(.debug, "Updated text: [\(result.text)] final:\(result.isLastPackage)")
+                log(.debug, "Updated text: [\(processedText)] final:\(result.isLastPackage)")
             }
 
             // Update status for final result
