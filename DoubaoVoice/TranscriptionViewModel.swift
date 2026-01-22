@@ -13,6 +13,10 @@ import Combine
 /// View model for managing transcription state and coordinating services
 @MainActor
 class TranscriptionViewModel: ObservableObject {
+    // MARK: - Singleton
+
+    static let shared = TranscriptionViewModel()
+
     // MARK: - Published Properties
 
     @Published var isRecording = false
@@ -25,22 +29,38 @@ class TranscriptionViewModel: ObservableObject {
     private let audioRecorder = AudioRecorder()
     private let asrClient = DoubaoASRClient()
     private var recordingStartTime: Date?
+    private var currentConfig: ASRConfig?
 
-    // ASR Configuration (using credentials from reference.py)
-    private let asrConfig = ASRConfig(
-        appKey: "3254061168",
-        accessKey: "1jFY86tc4aNrg-8K69dIM43HSjJ_jhyb",
-        resourceID: DoubaoConstants.resourceID,
-        enableVAD: true,
-        language: "zh-CN"
-    )
+    // MARK: - Initialization
+
+    private init() {
+        // Private initializer for singleton
+        updateConfig(settings: AppSettings.shared)
+    }
 
     // MARK: - Public Methods
+
+    /// Update ASR configuration from settings
+    func updateConfig(settings: AppSettings) {
+        currentConfig = ASRConfig(
+            appKey: settings.appKey,
+            accessKey: settings.accessKey,
+            resourceID: settings.resourceID,
+            enableVAD: settings.enableVAD,
+            language: "zh-CN"
+        )
+    }
 
     /// Start recording and transcription
     func startRecording() {
         Task {
             do {
+                // Ensure we have a valid config
+                guard let config = currentConfig else {
+                    errorMessage = "ASR configuration not set. Please check Settings."
+                    return
+                }
+
                 // Request microphone permission
                 let granted = await requestMicrophonePermission()
                 guard granted else {
@@ -57,7 +77,7 @@ class TranscriptionViewModel: ObservableObject {
                 log(.info, "Starting transcription session...")
 
                 // Connect to ASR service
-                try await asrClient.connect(config: asrConfig)
+                try await asrClient.connect(config: config)
                 statusMessage = "Connected"
 
                 // Start listening to ASR results
