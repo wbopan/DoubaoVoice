@@ -246,6 +246,17 @@ struct ControlsSettingsTab: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
+
+            Section {
+                Toggle("Auto-paste after finish", isOn: $settings.autoPasteAfterClose)
+            } header: {
+                Text("Behavior")
+                    .font(.headline)
+            } footer: {
+                Text("Automatically paste transcribed text into the previous application when using the finish action")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)

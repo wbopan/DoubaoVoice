@@ -13,6 +13,7 @@ import SwiftUI
 class FloatingWindowController: NSWindowController {
     private let viewModel = TranscriptionViewModel.shared
     private let settings = AppSettings.shared
+    private var previousActiveApp: NSRunningApplication?
 
     convenience init() {
         print("DEBUG: FloatingWindowController init() starting")
@@ -72,6 +73,13 @@ class FloatingWindowController: NSWindowController {
 
     override func showWindow(_ sender: Any?) {
         print("DEBUG: FloatingWindowController.showWindow() called")
+
+        // Capture the currently active app BEFORE we activate
+        previousActiveApp = NSWorkspace.shared.frontmostApplication
+        if let app = previousActiveApp {
+            log(.debug, "Captured previous active app: \(app.localizedName ?? "Unknown")")
+        }
+
         super.showWindow(sender)
 
         // Ensure window is visible
@@ -124,6 +132,59 @@ class FloatingWindowController: NSWindowController {
     private func saveWindowPosition() {
         guard let window = window else { return }
         settings.saveWindowPosition(window.frame.origin)
+    }
+
+    func performAutoPasteIfEnabled() {
+        guard settings.autoPasteAfterClose else { return }
+        guard !viewModel.transcribedText.isEmpty else { return }
+
+        guard let previousApp = previousActiveApp else {
+            log(.warning, "No previous app to paste into")
+            return
+        }
+
+        log(.info, "Performing auto-paste to \(previousApp.localizedName ?? "unknown app")")
+
+        // Brief delay before switching apps
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            // Activate the previous application
+            previousApp.activate(options: [.activateIgnoringOtherApps])
+
+            // Wait for app to become active, then simulate Cmd+V
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                self?.simulatePasteKeystroke()
+            }
+        }
+    }
+
+    private func simulatePasteKeystroke() {
+        guard let source = CGEventSource(stateID: .hidSystemState) else {
+            log(.error, "Failed to create CGEventSource for paste")
+            return
+        }
+
+        // Key code for 'V' is 9
+        let vKeyCode: CGKeyCode = 9
+
+        // Create key down event with Cmd modifier
+        guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: vKeyCode, keyDown: true) else {
+            log(.error, "Failed to create key down event")
+            return
+        }
+        keyDown.flags = .maskCommand
+
+        // Create key up event with Cmd modifier
+        guard let keyUp = CGEvent(keyboardEventSource: source, virtualKey: vKeyCode, keyDown: false) else {
+            log(.error, "Failed to create key up event")
+            return
+        }
+        keyUp.flags = .maskCommand
+
+        // Post events
+        keyDown.post(tap: .cghidEventTap)
+        keyUp.post(tap: .cghidEventTap)
+
+        log(.info, "Auto-paste keystroke simulated (Cmd+V)")
     }
 }
 
@@ -336,6 +397,11 @@ struct FloatingTranscriptionView: View {
             // Give brief moment for user to see "Copied" status
             if success {
                 try? await Task.sleep(nanoseconds: 300_000_000) // 300ms
+            }
+
+            // Perform auto-paste if enabled and copy succeeded
+            if success, let controller = NSApp.keyWindow?.windowController as? FloatingWindowController {
+                controller.performAutoPasteIfEnabled()
             }
 
             // Close window

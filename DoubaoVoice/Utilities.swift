@@ -486,6 +486,7 @@ enum UserDefaultsKeys {
     static let windowPositionY = "DoubaoVoice.WindowPositionY"
     static let finishHotkeyKeyCode = "DoubaoVoice.FinishHotkeyKeyCode"
     static let finishHotkeyModifiers = "DoubaoVoice.FinishHotkeyModifiers"
+    static let autoPasteAfterClose = "DoubaoVoice.AutoPasteAfterClose"
 
     static let defaultPort = 18888
 }
@@ -615,6 +616,10 @@ class AppSettings: ObservableObject {
         didSet { defaults.set(rememberWindowPosition, forKey: UserDefaultsKeys.rememberWindowPosition) }
     }
 
+    @Published var autoPasteAfterClose: Bool {
+        didSet { defaults.set(autoPasteAfterClose, forKey: UserDefaultsKeys.autoPasteAfterClose) }
+    }
+
     private init() {
         // Load saved values or use defaults (from reference.py credentials)
         self.appKey = defaults.string(forKey: UserDefaultsKeys.appKey) ?? "3254061168"
@@ -632,6 +637,8 @@ class AppSettings: ObservableObject {
         self.finishHotkey = HotkeyConfig(keyCode: finishKeyCode, modifiers: finishModifiers)
 
         self.rememberWindowPosition = defaults.object(forKey: UserDefaultsKeys.rememberWindowPosition) as? Bool ?? true
+
+        self.autoPasteAfterClose = defaults.object(forKey: UserDefaultsKeys.autoPasteAfterClose) as? Bool ?? true
 
         // Migrate: Remove deprecated resourceID setting
         if defaults.object(forKey: UserDefaultsKeys.resourceID) != nil {
