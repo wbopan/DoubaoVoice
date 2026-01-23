@@ -9,11 +9,10 @@ DoubaoVoice is a macOS application for real-time speech-to-text transcription us
 ### Python Reference Implementation
 The `REFERENCE.py` file contains a daemon implementation with HTTP API. This is reference code showing the protocol implementation but is NOT the primary application.
 
-## Build & Run Commands
+## Build Commands
 
 ```bash
-./build.sh          # Build only
-./run.sh      # Build and run with logs in terminal
+./build.sh          # Build and see logs
 ```
 
 ## Project Structure

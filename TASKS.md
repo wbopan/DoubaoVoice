@@ -1,9 +1,9 @@
 # TASKS
 
-- [] Auto Copy & Paste
-- [] Floating beside input cursor
-- [] Setting items
+- [x] Auto Copy & Paste
+- [x] Floating beside input cursor
+- [x] Setting items
   - APP ID
   - API Key
   - Global Hotkey
-- [] Press to record
+- [x] Press to record
