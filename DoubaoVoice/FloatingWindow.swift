@@ -469,8 +469,8 @@ struct FloatingTranscriptionView: View {
                 Spacer()
 
                 HStack(spacing: 8) {
-                    // Show loading indicator when preparing to record
-                    if !viewModel.isRecording && (viewModel.statusMessage == "Connecting..." || viewModel.statusMessage == "Connected") {
+                    // Show loading indicator when connecting
+                    if viewModel.isConnecting {
                         ProgressView()
                             .controlSize(.small)
                             .frame(width: 32, height: 32)
@@ -479,7 +479,7 @@ struct FloatingTranscriptionView: View {
                                     .fill(Color.primary.opacity(0.15))
                             )
                     }
-                    // Show buttons when recording
+                    // Show buttons when recording (fully connected and recording)
                     else if viewModel.isRecording {
                         // Always show close button when recording
                         Button(action: {

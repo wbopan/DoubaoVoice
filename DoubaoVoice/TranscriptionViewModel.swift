@@ -20,17 +20,37 @@ class TranscriptionViewModel: ObservableObject {
 
     // MARK: - Published Properties
 
-    @Published var isRecording = false
     @Published var transcribedText = ""
     @Published var errorMessage: String?
     @Published var statusMessage = "Ready"
 
     // MARK: - Private Properties
 
+    /// Recording lifecycle state
+    private enum RecordingState {
+        case idle           // Not recording
+        case connecting     // ASR connection in progress
+        case recording      // Fully recording (both ASR + audio)
+        case stopping       // Cleanup in progress
+    }
+
+    private var recordingState: RecordingState = .idle
+    private var recordingTask: Task<Void, Never>?
+
     private let audioRecorder = AudioRecorder()
     private let asrClient = DoubaoASRClient()
     private var recordingStartTime: Date?
     private var currentConfig: ASRConfig?
+
+    /// Computed property for backward compatibility
+    var isRecording: Bool {
+        recordingState == .recording || recordingState == .connecting
+    }
+
+    /// Check if we're in the connecting phase
+    var isConnecting: Bool {
+        recordingState == .connecting
+    }
 
     // MARK: - Initialization
 
@@ -54,11 +74,29 @@ class TranscriptionViewModel: ObservableObject {
 
     /// Start recording and transcription
     func startRecording() {
-        Task {
+        // Cancel any existing recording task
+        recordingTask?.cancel()
+
+        // Set connecting state IMMEDIATELY (before any async work)
+        recordingState = .connecting
+
+        // Clear previous state
+        transcribedText = ""
+        errorMessage = nil
+        statusMessage = "Connecting..."
+        recordingStartTime = Date()
+
+        // Store Task reference for cancellation
+        recordingTask = Task {
             do {
+                // Check for cancellation before starting
+                try Task.checkCancellation()
+
                 // Ensure we have a valid config
                 guard let config = currentConfig else {
                     errorMessage = "ASR configuration not set. Please check Settings."
+                    await performCleanup()
+                    recordingState = .idle
                     return
                 }
 
@@ -66,25 +104,30 @@ class TranscriptionViewModel: ObservableObject {
                 let granted = await requestMicrophonePermission()
                 guard granted else {
                     errorMessage = "Microphone permission denied. Please enable it in Settings."
+                    await performCleanup()
+                    recordingState = .idle
                     return
                 }
 
-                // Clear previous state
-                transcribedText = ""
-                errorMessage = nil
-                statusMessage = "Connecting..."
-                recordingStartTime = Date()
-
                 log(.info, "Starting transcription session...")
+
+                // Check for cancellation before connecting
+                try Task.checkCancellation()
 
                 // Connect to ASR service
                 try await asrClient.connect(config: config)
                 statusMessage = "Connected"
 
+                // Check for cancellation after connecting
+                try Task.checkCancellation()
+
                 // Start listening to ASR results
                 Task {
                     await listenToASRResults()
                 }
+
+                // Check for cancellation before starting audio
+                try Task.checkCancellation()
 
                 // Start audio recording
                 try await audioRecorder.startRecording { [weak self] audioData in
@@ -93,15 +136,24 @@ class TranscriptionViewModel: ObservableObject {
                     }
                 }
 
-                isRecording = true
+                // Only set .recording after audio actually starts
+                recordingState = .recording
                 statusMessage = "Recording..."
                 log(.info, "Transcription session started")
 
+            } catch is CancellationError {
+                // User-initiated cancellation - silent cleanup, no error message
+                log(.info, "Recording start cancelled by user")
+                await performCleanup()
+                recordingState = .idle
+                statusMessage = "Ready"
             } catch {
+                // Actual errors - show error message
                 errorMessage = "Failed to start recording: \(error.localizedDescription)"
                 statusMessage = "Error"
-                isRecording = false
                 log(.error, "Start recording error: \(error)")
+                await performCleanup()
+                recordingState = .idle
             }
         }
     }
@@ -109,47 +161,67 @@ class TranscriptionViewModel: ObservableObject {
     /// Stop recording and wait for final transcription
     func stopRecording() {
         Task {
-            guard isRecording else { return }
+            // Prevent re-entry
+            guard recordingState != .stopping && recordingState != .idle else {
+                log(.debug, "stopRecording() called but already stopping or idle")
+                return
+            }
 
-            log(.info, "Stopping transcription session...")
+            let previousState = recordingState
+            recordingState = .stopping
             statusMessage = "Stopping..."
-            isRecording = false
 
-            // Stop audio recording
+            log(.info, "Stopping transcription session (previous state: \(previousState))...")
+
+            // Cancel recording task if still running
+            recordingTask?.cancel()
+            recordingTask = nil
+
+            // ALWAYS stop audio recording, regardless of state
             await audioRecorder.stopRecording()
 
-            // Send final packet to ASR
-            do {
-                try await asrClient.sendFinalPacket()
+            // Handle ASR cleanup based on previous state
+            if previousState == .recording {
+                // Full recording was active - send final packet and wait for result
+                do {
+                    try await asrClient.sendFinalPacket()
 
-                // Wait for final result
-                statusMessage = "Processing..."
-                _ = await asrClient.waitForFinalResult()
+                    // Wait for final result
+                    statusMessage = "Processing..."
+                    _ = await asrClient.waitForFinalResult()
 
-                // Disconnect
-                await asrClient.disconnect()
+                    // Disconnect
+                    await asrClient.disconnect()
 
-                // Calculate duration
-                if let startTime = recordingStartTime {
-                    let duration = Date().timeIntervalSince(startTime)
-                    statusMessage = "Completed (\(String(format: "%.1f", duration))s)"
-                } else {
-                    statusMessage = "Completed"
+                    // Calculate duration
+                    if let startTime = recordingStartTime {
+                        let duration = Date().timeIntervalSince(startTime)
+                        statusMessage = "Completed (\(String(format: "%.1f", duration))s)"
+                    } else {
+                        statusMessage = "Completed"
+                    }
+
+                    log(.info, "Transcription session stopped")
+
+                } catch {
+                    errorMessage = "Failed to stop recording: \(error.localizedDescription)"
+                    statusMessage = "Error"
+                    log(.error, "Stop recording error: \(error)")
                 }
-
-                log(.info, "Transcription session stopped")
-
-            } catch {
-                errorMessage = "Failed to stop recording: \(error.localizedDescription)"
-                statusMessage = "Error"
-                log(.error, "Stop recording error: \(error)")
+            } else if previousState == .connecting {
+                // Still connecting - just disconnect without sending final packet
+                log(.info, "Stopping during connection phase - disconnecting only")
+                await asrClient.disconnect()
+                statusMessage = "Ready"
             }
+
+            recordingState = .idle
         }
     }
 
     /// Finish recording, wait for final result, and copy to clipboard
     func finishRecordingAndCopy() async -> Bool {
-        guard isRecording else { return false }
+        guard recordingState == .recording else { return false }
 
         log(.info, "Finishing transcription with copy to clipboard...")
         statusMessage = "Finishing..."
@@ -196,6 +268,12 @@ class TranscriptionViewModel: ObservableObject {
                 continuation.resume(returning: granted)
             }
         }
+    }
+
+    /// Cleanup helper - stops audio and disconnects ASR
+    private func performCleanup() async {
+        await audioRecorder.stopRecording()
+        await asrClient.disconnect()
     }
 
     /// Send audio data to ASR service

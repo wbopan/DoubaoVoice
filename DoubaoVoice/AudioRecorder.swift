@@ -81,7 +81,10 @@ actor AudioRecorder {
 
     /// Stop recording audio
     func stopRecording() {
-        guard isRecording else { return }
+        guard isRecording else {
+            log(.debug, "Audio recorder already stopped")
+            return
+        }
 
         log(.info, "Stopping audio recording...")
 
