@@ -110,6 +110,9 @@ class FloatingWindowController: NSWindowController {
         window.level = .floating
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
 
+        // Keep window visible when losing focus (important for recording)
+        window.hidesOnDeactivate = false
+
         // Ensure window is visible
         window.isOpaque = false
         window.backgroundColor = .clear
@@ -337,8 +340,13 @@ class FloatingWindow: NSPanel {
                 return nil
             }
 
-            // Handle finish hotkey (only when recording)
+            // Handle finish hotkey (only when recording and hotkey is set)
             guard TranscriptionViewModel.shared.isRecording else {
+                return event
+            }
+
+            // Skip if finish hotkey is unset
+            guard !finishConfig.isUnset else {
                 return event
             }
 
@@ -410,7 +418,9 @@ struct FloatingTranscriptionView: View {
                             .imageScale(.small)
                     }
                     .buttonStyle(.plain)
-                    .help("Finish and copy (\(AppSettings.shared.finishHotkey.displayString))")
+                    .help(AppSettings.shared.finishHotkey.isUnset
+                        ? "Finish and copy (no hotkey set)"
+                        : "Finish and copy (\(AppSettings.shared.finishHotkey.displayString))")
                 }
 
                 // Close button

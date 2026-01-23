@@ -31,6 +31,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Setup global hotkey
         setupHotkey()
 
+        // Observe hotkey changes
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleHotkeyChanged),
+            name: .globalHotkeyChanged,
+            object: nil
+        )
+
         log(.info, "DoubaoVoice menu bar app launched")
     }
 
@@ -89,6 +97,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Global Hotkey Setup
 
     private func setupHotkey() {
+        // Don't register if hotkey is unset
+        guard !settings.globalHotkey.isUnset else {
+            log(.warning, "Global hotkey is unset, skipping registration")
+            return
+        }
+
         hotkeyManager = GlobalHotkeyManager(
             keyCode: settings.globalHotkey.keyCode,
             modifiers: settings.globalHotkey.modifiers
@@ -102,9 +116,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         log(.info, "Global hotkey registered: \(settings.globalHotkey.displayString)")
     }
 
-    func updateHotkey() {
-        hotkeyManager?.unregister()
+    @objc private func handleHotkeyChanged() {
+        print("🔔 Received globalHotkeyChanged notification")
+        print("🔄 Updating hotkey...")
+        log(.info, "Updating global hotkey...")
+
+        if hotkeyManager != nil {
+            print("🔄 Unregistering old hotkey")
+            hotkeyManager?.unregister()
+            hotkeyManager = nil
+        }
+
+        print("🔄 Setting up new hotkey: \(settings.globalHotkey.displayString)")
         setupHotkey()
+        log(.info, "Global hotkey updated to: \(settings.globalHotkey.displayString)")
+        print("✅ Hotkey update complete")
     }
 
     // MARK: - Window Management
@@ -261,4 +287,5 @@ extension String {
 
 extension Notification.Name {
     static let recordingStateChanged = Notification.Name("recordingStateChanged")
+    static let globalHotkeyChanged = Notification.Name("globalHotkeyChanged")
 }

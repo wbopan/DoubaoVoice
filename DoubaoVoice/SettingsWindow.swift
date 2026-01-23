@@ -46,8 +46,6 @@ struct SettingsView: View {
     @ObservedObject private var settings = AppSettings.shared
     private let viewModel = TranscriptionViewModel.shared
 
-    @State private var showingHotkeyRecorder = false
-    @State private var showingFinishHotkeyRecorder = false
     @State private var tempAppKey = ""
     @State private var tempAccessKey = ""
 
@@ -60,14 +58,10 @@ struct SettingsView: View {
                         Label("API", systemImage: "key.fill")
                     }
 
-                ControlsSettingsTab(
-                    settings: settings,
-                    showingHotkeyRecorder: $showingHotkeyRecorder,
-                    showingFinishHotkeyRecorder: $showingFinishHotkeyRecorder
-                )
-                .tabItem {
-                    Label("Controls", systemImage: "command")
-                }
+                ControlsSettingsTab(settings: settings)
+                    .tabItem {
+                        Label("Controls", systemImage: "command")
+                    }
 
                 AboutTab()
                     .tabItem {
@@ -95,35 +89,6 @@ struct SettingsView: View {
             .padding()
         }
         .background(.thickMaterial)
-        .sheet(isPresented: $showingHotkeyRecorder) {
-            HotkeyRecorderView(
-                currentHotkey: settings.globalHotkey,
-                onSave: { newHotkey in
-                    settings.globalHotkey = newHotkey
-                    showingHotkeyRecorder = false
-
-                    // Update the global hotkey registration
-                    if let appDelegate = NSApp.delegate as? AppDelegate {
-                        appDelegate.updateHotkey()
-                    }
-                },
-                onCancel: {
-                    showingHotkeyRecorder = false
-                }
-            )
-        }
-        .sheet(isPresented: $showingFinishHotkeyRecorder) {
-            HotkeyRecorderView(
-                currentHotkey: settings.finishHotkey,
-                onSave: { newHotkey in
-                    settings.finishHotkey = newHotkey
-                    showingFinishHotkeyRecorder = false
-                },
-                onCancel: {
-                    showingFinishHotkeyRecorder = false
-                }
-            )
-        }
         .onAppear {
             // Load current settings
             tempAppKey = settings.appKey
@@ -181,26 +146,26 @@ struct APISettingsTab: View {
 
 struct ControlsSettingsTab: View {
     @ObservedObject var settings: AppSettings
-    @Binding var showingHotkeyRecorder: Bool
-    @Binding var showingFinishHotkeyRecorder: Bool
 
     var body: some View {
         Form {
             Section {
                 HStack {
                     Text("Hotkey:")
-                        .frame(width: 100, alignment: .trailing)
 
-                    Text(settings.globalHotkey.displayString)
-                        .font(.system(.body, design: .monospaced))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(.thickMaterial)
-                        .cornerRadius(6)
+                    Spacer()
 
-                    Button("Change...") {
-                        showingHotkeyRecorder = true
-                    }
+                    HotkeyInputCapsule(
+                        hotkey: Binding(
+                            get: { settings.globalHotkey },
+                            set: { newValue in
+                                print("🔧 Hotkey changed to: \(newValue.displayString)")
+                                settings.globalHotkey = newValue
+                                print("🔧 Settings updated (notification will be posted via didSet)")
+                            }
+                        ),
+                        requireModifiers: true
+                    )
                 }
             } header: {
                 Text("Global Hotkey")
@@ -214,18 +179,16 @@ struct ControlsSettingsTab: View {
             Section {
                 HStack {
                     Text("Finish & Copy:")
-                        .frame(width: 100, alignment: .trailing)
 
-                    Text(settings.finishHotkey.displayString)
-                        .font(.system(.body, design: .monospaced))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(.thickMaterial)
-                        .cornerRadius(6)
+                    Spacer()
 
-                    Button("Change...") {
-                        showingFinishHotkeyRecorder = true
-                    }
+                    HotkeyInputCapsule(
+                        hotkey: Binding(
+                            get: { settings.finishHotkey },
+                            set: { settings.finishHotkey = $0 }
+                        ),
+                        requireModifiers: false
+                    )
                 }
             } header: {
                 Text("Window Hotkey")
@@ -322,137 +285,165 @@ struct AboutTab: View {
     }
 }
 
-// MARK: - Hotkey Recorder View
+// MARK: - Hotkey Input Capsule
 
-struct HotkeyRecorderView: View {
-    let currentHotkey: HotkeyConfig
-    let onSave: (HotkeyConfig) -> Void
-    let onCancel: () -> Void
+struct HotkeyInputCapsule: View {
+    @Binding var hotkey: HotkeyConfig
+    var requireModifiers: Bool = true
 
+    @State private var isRecording = false
     @State private var recordedKeyCode: UInt32?
     @State private var recordedModifiers: UInt32 = 0
-    @State private var isRecording = false
+    @State private var recordingViewID = UUID()
 
     var body: some View {
-        VStack(spacing: 20) {
-            Text("Press a Hotkey")
-                .font(.headline)
-
-            Text("Press a key combination to set as the global hotkey")
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-
-            // Display current/recorded hotkey
-            HStack {
-                if isRecording {
-                    Text(recordedDisplayString)
-                        .font(.system(.title2, design: .monospaced))
-                        .foregroundColor(.accentColor)
-                } else {
-                    Text(currentHotkey.displayString)
-                        .font(.system(.title2, design: .monospaced))
-                        .foregroundColor(.secondary)
-                }
-            }
-            .frame(minWidth: 150, minHeight: 60)
-            .frame(maxWidth: .infinity)
-            .background(.thickMaterial)
-            .cornerRadius(8)
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(isRecording ? Color.accentColor : Color.clear, lineWidth: 2)
-            )
-
-            if !isRecording {
-                Button("Start Recording") {
-                    startRecording()
-                }
-            } else {
-                Text("Waiting for key press...")
-                    .font(.caption)
+        // Display text (centered)
+        Group {
+            if isRecording {
+                Text(recordedDisplayString)
+                    .font(.system(.body, design: .monospaced))
+                    .tracking(1.5)
                     .foregroundColor(.accentColor)
-            }
-
-            Divider()
-
-            HStack {
-                Button("Cancel") {
-                    onCancel()
-                }
-                .keyboardShortcut(.cancelAction)
-
-                Spacer()
-
-                Button("Save") {
-                    if let keyCode = recordedKeyCode {
-                        let newHotkey = HotkeyConfig(keyCode: keyCode, modifiers: recordedModifiers)
-                        onSave(newHotkey)
-                    } else {
-                        onCancel()
-                    }
-                }
-                .disabled(recordedKeyCode == nil)
-                .keyboardShortcut(.defaultAction)
+                    .lineLimit(1)
+            } else {
+                Text(displayText)
+                    .font(.system(.body, design: .monospaced))
+                    .tracking(1.5)
+                    .foregroundColor(hotkey.isUnset ? .secondary : .primary)
+                    .lineLimit(1)
             }
         }
-        .padding(30)
-        .frame(width: 350, height: 280)
-        .background(HotkeyRecorderRepresentable(
-            isRecording: $isRecording,
-            recordedKeyCode: $recordedKeyCode,
-            recordedModifiers: $recordedModifiers
-        ))
+        .frame(maxWidth: .infinity) // Center the text
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(width: 130, alignment: .center) // 30% longer than 100
+        .background(.thickMaterial)
+        .cornerRadius(20)
+        .overlay(
+            RoundedRectangle(cornerRadius: 20)
+                .stroke(isRecording ? Color.accentColor : Color.clear, lineWidth: 2)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            handleTap()
+        }
+        .background(
+            HotkeyRecorderBackgroundView(
+                isRecording: $isRecording,
+                recordedKeyCode: $recordedKeyCode,
+                recordedModifiers: $recordedModifiers,
+                requireModifiers: requireModifiers,
+                onRecorded: { keyCode, modifiers in
+                    hotkey = HotkeyConfig(keyCode: keyCode, modifiers: modifiers)
+                    isRecording = false
+                },
+                viewID: recordingViewID
+            )
+        )
+    }
+
+    private var displayText: String {
+        // Check if hotkey is "unset" (using a sentinel value or default)
+        // For now, we'll just display the current hotkey
+        return hotkey.displayString
     }
 
     private var recordedDisplayString: String {
         guard let keyCode = recordedKeyCode else {
-            return "Press a key..."
+            return "Listening..."
         }
 
         let tempHotkey = HotkeyConfig(keyCode: keyCode, modifiers: recordedModifiers)
         return tempHotkey.displayString
     }
 
+    private func handleTap() {
+        // If already recording, do nothing (let keyboard handler process)
+        if isRecording {
+            return
+        }
+
+        // If hotkey is set, clear it on first click
+        if !hotkey.isUnset {
+            hotkey = HotkeyConfig.unset
+        } else {
+            // If hotkey is not set, start recording on click
+            startRecording()
+        }
+    }
+
     private func startRecording() {
         isRecording = true
         recordedKeyCode = nil
         recordedModifiers = 0
+        // Force view ID change to recreate the background view and regain focus
+        recordingViewID = UUID()
     }
 }
 
-// MARK: - Hotkey Recorder NSView Representable
+// MARK: - Hotkey Recorder Background View
 
-struct HotkeyRecorderRepresentable: NSViewRepresentable {
+struct HotkeyRecorderBackgroundView: NSViewRepresentable {
     @Binding var isRecording: Bool
     @Binding var recordedKeyCode: UInt32?
     @Binding var recordedModifiers: UInt32
+    var requireModifiers: Bool
+    var onRecorded: (UInt32, UInt32) -> Void
+    var viewID: UUID
 
-    func makeNSView(context: Context) -> HotkeyRecorderNSView {
-        let view = HotkeyRecorderNSView()
+    func makeNSView(context: Context) -> HotkeyRecorderBackgroundNSView {
+        let view = HotkeyRecorderBackgroundNSView()
+        view.requireModifiers = requireModifiers
         view.onKeyPress = { keyCode, modifiers in
             recordedKeyCode = keyCode
             recordedModifiers = modifiers
-            isRecording = false
+            onRecorded(keyCode, modifiers)
         }
         return view
     }
 
-    func updateNSView(_ nsView: HotkeyRecorderNSView, context: Context) {
+    func updateNSView(_ nsView: HotkeyRecorderBackgroundNSView, context: Context) {
         nsView.isRecording = isRecording
+        nsView.requireModifiers = requireModifiers
+
+        // When recording starts, request focus
+        if isRecording {
+            DispatchQueue.main.async {
+                nsView.window?.makeFirstResponder(nsView)
+            }
+        }
     }
 }
 
-// MARK: - Hotkey Recorder NSView
+// MARK: - Hotkey Recorder Background NSView
 
-class HotkeyRecorderNSView: NSView {
+class HotkeyRecorderBackgroundNSView: NSView {
     var onKeyPress: ((UInt32, UInt32) -> Void)?
-    var isRecording = false
+    var isRecording = false {
+        didSet {
+            if isRecording {
+                // Request focus when recording starts
+                DispatchQueue.main.async { [weak self] in
+                    self?.window?.makeFirstResponder(self)
+                }
+            }
+        }
+    }
+    var requireModifiers = true
 
     override var acceptsFirstResponder: Bool { true }
 
     override func becomeFirstResponder() -> Bool {
         return true
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil && isRecording {
+            DispatchQueue.main.async { [weak self] in
+                self?.window?.makeFirstResponder(self)
+            }
+        }
     }
 
     override func keyDown(with event: NSEvent) {
@@ -462,6 +453,13 @@ class HotkeyRecorderNSView: NSView {
         }
 
         let keyCode = UInt32(event.keyCode)
+
+        // Escape key (keyCode 53) cancels recording
+        if keyCode == 53 {
+            // Don't call onKeyPress, just let recording be cancelled by not saving
+            return
+        }
+
         var modifiers: UInt32 = 0
 
         let flags = event.modifierFlags
@@ -481,7 +479,7 @@ class HotkeyRecorderNSView: NSView {
 
         // For finish hotkey (Enter key), allow no modifiers (local scope)
         // For global hotkeys, require at least one modifier
-        guard modifiers != 0 || keyCode == 36 else {
+        if requireModifiers && modifiers == 0 && keyCode != 36 {
             NSSound.beep()
             return
         }
@@ -491,6 +489,15 @@ class HotkeyRecorderNSView: NSView {
 
     override func flagsChanged(with event: NSEvent) {
         // Don't call super to prevent default behavior
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        // Capture mouse down to gain first responder status
+        if !isRecording {
+            super.mouseDown(with: event)
+        } else {
+            window?.makeFirstResponder(self)
+        }
     }
 }
 

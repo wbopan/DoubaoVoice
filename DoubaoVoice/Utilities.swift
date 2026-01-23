@@ -552,7 +552,22 @@ struct HotkeyConfig: Codable, Equatable {
         modifiers: 0  // No modifiers required (local scope)
     )
 
+    // Unset hotkey (no binding)
+    static let unset = HotkeyConfig(
+        keyCode: 0,
+        modifiers: 0
+    )
+
+    var isUnset: Bool {
+        return keyCode == 0 && modifiers == 0
+    }
+
     var displayString: String {
+        // Show "Not Set" for unset hotkeys
+        if isUnset {
+            return "Not Set"
+        }
+
         var parts: [String] = []
 
         if modifiers & UInt32(controlKey) != 0 {
@@ -572,6 +587,7 @@ struct HotkeyConfig: Codable, Equatable {
         let keyString = keyCodeToString(keyCode)
         parts.append(keyString)
 
+        // No spaces at all
         return parts.joined()
     }
 
@@ -645,6 +661,8 @@ class AppSettings: ObservableObject {
         didSet {
             defaults.set(globalHotkey.keyCode, forKey: UserDefaultsKeys.globalHotkeyKeyCode)
             defaults.set(globalHotkey.modifiers, forKey: UserDefaultsKeys.globalHotkeyModifiers)
+            // Notify that hotkey has changed so AppDelegate can re-register
+            NotificationCenter.default.post(name: .globalHotkeyChanged, object: nil)
         }
     }
 
