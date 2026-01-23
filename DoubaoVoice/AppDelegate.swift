@@ -107,20 +107,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func handleHotkeyChanged() {
-        print("🔔 Received globalHotkeyChanged notification")
-        print("🔄 Updating hotkey...")
         log(.info, "Updating global hotkey...")
 
-        if hotkeyManager != nil {
-            print("🔄 Unregistering old hotkey")
-            hotkeyManager?.unregister()
-            hotkeyManager = nil
-        }
+        hotkeyManager?.unregister()
+        hotkeyManager = nil
 
-        print("🔄 Setting up new hotkey: \(settings.globalHotkey.displayString)")
         setupHotkey()
         log(.info, "Global hotkey updated to: \(settings.globalHotkey.displayString)")
-        print("✅ Hotkey update complete")
     }
 
     // MARK: - Double-Tap-and-Hold Modifier Key Setup
@@ -571,16 +564,9 @@ class ModifierKeyMonitor {
 
     private func checkActivation() {
         // Verify we're still in secondPressHeld state and the key is still pressed
-        guard state == .secondPressHeld else {
-            return
-        }
-
-        guard let pressTime = secondPressTime else {
-            return
-        }
-
-        let elapsed = Date().timeIntervalSince(pressTime)
-        guard elapsed >= minimumDuration else {
+        guard state == .secondPressHeld,
+              let pressTime = secondPressTime,
+              Date().timeIntervalSince(pressTime) >= minimumDuration else {
             return
         }
 
