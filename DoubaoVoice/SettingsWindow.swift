@@ -131,10 +131,37 @@ struct APISettingsTab: View {
             } header: {
                 Text("Doubao API Credentials")
                     .font(.headline)
-            } footer: {
-                Text("Obtain credentials from the Doubao console at console.volcengine.com")
+            }
+
+            Section {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("How to get credentials:")
+                        .fontWeight(.medium)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("1. Open the Volcengine Speech Console")
+                        Text("2. Select \"旧版控制台\" (Legacy Console) in the upper left")
+                        Text("3. Navigate to \"语音识别大模型\" → \"流式语音识别大模型\"")
+                        Text("4. Copy your App ID and Access Token")
+                    }
                     .font(.caption)
                     .foregroundColor(.secondary)
+
+                    Button {
+                        if let url = URL(string: "https://console.volcengine.com/speech/app") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    } label: {
+                        HStack {
+                            Image(systemName: "arrow.up.right.square")
+                            Text("Open Volcengine Console")
+                        }
+                    }
+                    .buttonStyle(.link)
+                }
+            } header: {
+                Text("Setup Guide")
+                    .font(.headline)
             }
         }
         .formStyle(.grouped)
