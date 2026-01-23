@@ -117,25 +117,32 @@ class FloatingWindowController: NSWindowController {
 
         log(.debug, "Window properties set")
 
-        // Create SwiftUI view with glass effect
+        // Create SwiftUI view - Liquid Glass effect is applied in SwiftUI
         let contentView = FloatingTranscriptionView()
         let hostingView = NSHostingView(rootView: contentView)
         hostingView.autoresizingMask = [.width, .height]
 
-        // Create glass effect base
-        let glassView = GlassEffectView(frame: window.contentView!.bounds)
-        glassView.autoresizingMask = [.width, .height]
-
-        // Make hosting view transparent
+        // Make hosting view fully transparent for Liquid Glass to work properly
+        hostingView.wantsLayer = true
         hostingView.layer?.backgroundColor = .clear
 
-        // Set up view hierarchy
-        glassView.addSubview(hostingView)
-        hostingView.frame = glassView.bounds
+        // Remove any default background from the hosting view's subviews
+        func clearBackgrounds(_ view: NSView) {
+            view.wantsLayer = true
+            view.layer?.backgroundColor = .clear
+            for subview in view.subviews {
+                clearBackgrounds(subview)
+            }
+        }
 
-        window.contentView = glassView
+        window.contentView = hostingView
 
-        log(.debug, "Content view set with glass effect")
+        // Clear backgrounds after adding to window (needed for proper layer setup)
+        DispatchQueue.main.async {
+            clearBackgrounds(hostingView)
+        }
+
+        log(.debug, "Content view set with Liquid Glass effect")
 
         // Restore saved position
         if let savedPosition = AppSettings.shared.getSavedWindowPosition() {
@@ -424,44 +431,30 @@ class FloatingWindow: NSPanel {
     }
 }
 
-// MARK: - Glass Effect View
+// MARK: - Circular Glass Button
 
-class GlassEffectView: NSView {
-    private let visualEffectView: NSVisualEffectView
+struct CircularGlassButton: View {
+    let systemName: String
+    let isAccent: Bool
+    let action: () -> Void
 
-    override init(frame: NSRect) {
-        visualEffectView = NSVisualEffectView(frame: frame)
-        super.init(frame: frame)
+    @State private var isPressed = false
 
-        // Configure glass effect
-        visualEffectView.material = .popover
-        visualEffectView.blendingMode = .behindWindow
-        visualEffectView.state = .active
-        visualEffectView.wantsLayer = true
-        visualEffectView.autoresizingMask = [.width, .height]
-
-        // Apply large corner radius
-        visualEffectView.layer?.cornerRadius = 28.0
-        visualEffectView.layer?.masksToBounds = true
-
-        addSubview(visualEffectView)
-
-        // Add subtle tint layer for glass aesthetic
-        let tintLayer = CALayer()
-        tintLayer.backgroundColor = CGColor(gray: 0.95, alpha: 0.3)
-        tintLayer.cornerRadius = 28.0
-        tintLayer.frame = bounds
-        tintLayer.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
-        visualEffectView.layer?.addSublayer(tintLayer)
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) not implemented")
-    }
-
-    override func layout() {
-        super.layout()
-        visualEffectView.frame = bounds
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(isAccent ? .white : .primary)
+                .frame(width: 32, height: 32)
+                .background {
+                    if isAccent {
+                        Circle()
+                            .fill(Color.accentColor)
+                    }
+                }
+                .glassEffect(isAccent ? .clear : .regular, in: .circle)
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -505,6 +498,7 @@ struct WaveformBar: View {
 
 struct FloatingTranscriptionView: View {
     @ObservedObject private var viewModel = TranscriptionViewModel.shared
+    @Namespace private var buttonNamespace
 
     var body: some View {
         VStack(spacing: 0) {
@@ -521,6 +515,7 @@ struct FloatingTranscriptionView: View {
                 .padding(.top, 12)
                 .padding(.bottom, 4)
             }
+            .scrollContentBackground(.hidden)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             // Button area - waveform on left, buttons on right
@@ -534,54 +529,49 @@ struct FloatingTranscriptionView: View {
 
                 Spacer()
 
-                HStack(spacing: 8) {
-                    // Show loading indicator when connecting
-                    if viewModel.isConnecting {
-                        ProgressView()
-                            .controlSize(.small)
-                            .frame(width: 32, height: 32)
-                            .background(
-                                Circle()
-                                    .fill(Color.primary.opacity(0.15))
+                GlassEffectContainer(spacing: 8) {
+                    HStack(spacing: 8) {
+                        // Show loading indicator when connecting
+                        if viewModel.isConnecting {
+                            ProgressView()
+                                .controlSize(.small)
+                                .frame(width: 32, height: 32)
+                        }
+                        // Show buttons when recording (fully connected and recording)
+                        else if viewModel.isRecording {
+                            // Always show close button when recording
+                            CircularGlassButton(
+                                systemName: "xmark",
+                                isAccent: false,
+                                action: closeWindow
                             )
-                    }
-                    // Show buttons when recording (fully connected and recording)
-                    else if viewModel.isRecording {
-                        // Always show close button when recording
-                        Button(action: {
-                            closeWindow()
-                        }) {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 14, weight: .bold))
-                        }
-                        .buttonStyle(CircularButtonStyle(isAccent: false))
-                        .help("Hide window (ESC)")
+                            .glassEffectID("close", in: buttonNamespace)
+                            .help("Hide window (ESC)")
 
-                        // Only show submit button when there's text
-                        if !viewModel.transcribedText.isEmpty {
-                            Button(action: {
-                                finishRecording()
-                            }) {
-                                Image(systemName: "arrow.up")
-                                    .font(.system(size: 14, weight: .bold))
+                            // Only show submit button when there's text
+                            if !viewModel.transcribedText.isEmpty {
+                                CircularGlassButton(
+                                    systemName: "arrow.up",
+                                    isAccent: true,
+                                    action: finishRecording
+                                )
+                                .glassEffectID("submit", in: buttonNamespace)
+                                .help(AppSettings.shared.finishHotkey.isUnset
+                                    ? "Finish and copy (no hotkey set)"
+                                    : "Finish and copy (\(AppSettings.shared.finishHotkey.displayString))")
+                                .transition(.opacity)
                             }
-                            .buttonStyle(CircularButtonStyle(isAccent: true))
-                            .help(AppSettings.shared.finishHotkey.isUnset
-                                ? "Finish and copy (no hotkey set)"
-                                : "Finish and copy (\(AppSettings.shared.finishHotkey.displayString))")
-                            .transition(.opacity)
                         }
-                    }
-                    // Show close button when not recording (finished state)
-                    else {
-                        Button(action: {
-                            closeWindow()
-                        }) {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 14, weight: .bold))
+                        // Show close button when not recording (finished state)
+                        else {
+                            CircularGlassButton(
+                                systemName: "xmark",
+                                isAccent: false,
+                                action: closeWindow
+                            )
+                            .glassEffectID("close", in: buttonNamespace)
+                            .help("Hide window (ESC)")
                         }
-                        .buttonStyle(CircularButtonStyle(isAccent: false))
-                        .help("Hide window (ESC)")
                     }
                 }
                 .padding(.horizontal, 20)
@@ -591,6 +581,9 @@ struct FloatingTranscriptionView: View {
             .animation(.easeInOut(duration: 0.2), value: viewModel.isRecording)
         }
         .frame(minWidth: 150, minHeight: 70)
+        .background(.clear)
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 28))
+        .clipShape(RoundedRectangle(cornerRadius: 28))
         .onAppear {
             // Adjust window size on initial appearance
             DispatchQueue.main.async {
@@ -697,24 +690,6 @@ struct FloatingTranscriptionView: View {
             // Close window
             closeWindow()
         }
-    }
-}
-
-// MARK: - Circular Button Style
-
-struct CircularButtonStyle: ButtonStyle {
-    let isAccent: Bool
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .foregroundColor(isAccent ? .white : .primary)
-            .frame(width: 32, height: 32)
-            .background(
-                Circle()
-                    .fill(isAccent ? Color.accentColor : Color.primary.opacity(configuration.isPressed ? 0.3 : 0.15))
-            )
-            .scaleEffect(configuration.isPressed ? 0.9 : 1.0)
-            .animation(.easeInOut(duration: 0.15), value: configuration.isPressed)
     }
 }
 
