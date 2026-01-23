@@ -88,17 +88,17 @@ struct ContentView: View {
         .frame(minWidth: 500, minHeight: 400)
     }
 
-    // Status indicator color
     private var statusColor: Color {
         if viewModel.isRecording {
             return .red
-        } else if viewModel.errorMessage != nil {
-            return .orange
-        } else if viewModel.statusMessage.contains("Connected") || viewModel.statusMessage.contains("Completed") {
-            return .green
-        } else {
-            return .gray
         }
+        if viewModel.errorMessage != nil {
+            return .orange
+        }
+        if viewModel.statusMessage.contains("Connected") || viewModel.statusMessage.contains("Completed") {
+            return .green
+        }
+        return .gray
     }
 }
 

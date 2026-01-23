@@ -159,10 +159,9 @@ actor AudioRecorder {
 
         // Calculate RMS audio level for waveform visualization
         let samples = channelData[0]
-        var sumSquares: Float = 0.0
-        for i in 0..<frameLength {
+        let sumSquares = (0..<frameLength).reduce(Float(0)) { sum, i in
             let sample = Float(samples[i]) / Float(Int16.max)
-            sumSquares += sample * sample
+            return sum + sample * sample
         }
         let rms = sqrt(sumSquares / Float(max(frameLength, 1)))
         // Amplify RMS significantly for better visual response
