@@ -596,7 +596,7 @@ struct LongPressConfig: Codable, Equatable {
     static let `default` = LongPressConfig(
         enabled: false,
         modifierKey: .option,
-        minimumPressDuration: 0.3,
+        minimumPressDuration: 0.15,
         autoSubmitOnRelease: true
     )
 }
