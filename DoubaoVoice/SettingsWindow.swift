@@ -226,7 +226,7 @@ struct ControlsSettingsTab: View {
                     .foregroundColor(.secondary)
             }
 
-            LongPressModifierSection(settings: settings)
+            DoubleTapHoldModifierSection(settings: settings)
 
             Section {
                 Toggle("Enable Voice Activity Detection", isOn: $settings.enableVAD)
@@ -280,15 +280,15 @@ struct ControlsSettingsTab: View {
     }
 }
 
-// MARK: - Long-Press Modifier Section
+// MARK: - Double-Tap-and-Hold Modifier Section
 
-struct LongPressModifierSection: View {
+struct DoubleTapHoldModifierSection: View {
     @ObservedObject var settings: AppSettings
     @State private var hasAccessibilityPermission = false
 
     var body: some View {
         Section {
-            Toggle("Enable long-press modifier", isOn: Binding(
+            Toggle("Enable double-tap-and-hold", isOn: Binding(
                 get: { settings.longPressConfig.enabled },
                 set: { newValue in
                     var config = settings.longPressConfig
@@ -344,7 +344,7 @@ struct LongPressModifierSection: View {
                 }
 
                 HStack {
-                    Text("Minimum duration:")
+                    Text("Hold duration:")
 
                     Slider(
                         value: Binding(
@@ -374,10 +374,10 @@ struct LongPressModifierSection: View {
                 ))
             }
         } header: {
-            Text("Long-Press Modifier")
+            Text("Double-Tap-and-Hold")
                 .font(.headline)
         } footer: {
-            Text("Hold the selected modifier key to start recording. Release to finish and auto-paste. This feature requires Accessibility permission.")
+            Text("Double-tap the modifier key and hold on the second tap to start recording. Release to finish and auto-paste. This feature requires Accessibility permission.")
                 .font(.caption)
                 .foregroundColor(.secondary)
         }

@@ -33,8 +33,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Setup global hotkey
         setupHotkey()
 
-        // Setup long-press modifier key monitor
-        setupLongPressMonitor()
+        // Setup double-tap-and-hold modifier key monitor
+        setupDoubleTapHoldMonitor()
 
         // Observe hotkey changes
         NotificationCenter.default.addObserver(
@@ -123,53 +123,53 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         print("✅ Hotkey update complete")
     }
 
-    // MARK: - Long-Press Modifier Key Setup
+    // MARK: - Double-Tap-and-Hold Modifier Key Setup
 
-    private func setupLongPressMonitor() {
+    private func setupDoubleTapHoldMonitor() {
         // Stop existing monitor if any
         modifierKeyMonitor?.stop()
         modifierKeyMonitor = nil
 
         let config = settings.longPressConfig
         guard config.enabled else {
-            log(.info, "Long-press modifier key is disabled")
+            log(.info, "Double-tap-and-hold modifier key is disabled")
             return
         }
 
-        log(.info, "Setting up long-press monitor for \(config.modifierKey.displayName) key")
+        log(.info, "Setting up double-tap-and-hold monitor for \(config.modifierKey.displayName) key")
 
         modifierKeyMonitor = ModifierKeyMonitor(
             modifierKey: config.modifierKey,
             minimumDuration: config.minimumPressDuration,
             onActivate: { [weak self] in
                 Task { @MainActor in
-                    self?.handleLongPressActivate()
+                    self?.handleDoubleTapHoldActivate()
                 }
             },
             onRelease: { [weak self] in
                 Task { @MainActor in
-                    self?.handleLongPressRelease()
+                    self?.handleDoubleTapHoldRelease()
                 }
             }
         )
 
         modifierKeyMonitor?.start()
-        log(.info, "Long-press monitor started for \(config.modifierKey.symbol) key")
+        log(.info, "Double-tap-and-hold monitor started for \(config.modifierKey.symbol) key")
     }
 
     @objc private func handleLongPressConfigChanged() {
-        log(.info, "Long-press config changed, updating monitor...")
-        setupLongPressMonitor()
+        log(.info, "Double-tap-and-hold config changed, updating monitor...")
+        setupDoubleTapHoldMonitor()
     }
 
     @MainActor
-    private func handleLongPressActivate() {
-        log(.info, "Long-press activated, showing window and starting recording")
+    private func handleDoubleTapHoldActivate() {
+        log(.info, "Double-tap-and-hold activated, showing window and starting recording")
         showWindow()
     }
 
     @MainActor
-    private func handleLongPressRelease() {
+    private func handleDoubleTapHoldRelease() {
         guard settings.longPressConfig.autoSubmitOnRelease else {
             log(.debug, "Auto-submit on release is disabled, ignoring release")
             return
@@ -184,11 +184,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         if viewModel.transcribedText.isEmpty {
             // No text - just close the window
-            log(.info, "Long-press released with no text, closing window")
+            log(.info, "Double-tap-and-hold released with no text, closing window")
             controller.hideWindow()
         } else {
             // Has text - trigger finish recording (submit and close)
-            log(.info, "Long-press released with text, triggering finish recording")
+            log(.info, "Double-tap-and-hold released with text, triggering finish recording")
             NotificationCenter.default.post(name: .finishRecordingRequested, object: nil)
         }
     }
@@ -345,20 +345,52 @@ extension String {
 
 // MARK: - Modifier Key Monitor
 
-/// Monitors global modifier key press/release events for long-press activation
+/// Monitors global modifier key press/release events for double-tap-and-hold activation
 /// Requires Accessibility permission to work
+///
+/// State machine:
+/// idle → firstPressDown → waitingForSecondPress → secondPressHeld → activated
 class ModifierKeyMonitor {
+    // MARK: - State Machine
+
+    private enum State: CustomStringConvertible {
+        case idle
+        case firstPressDown
+        case waitingForSecondPress
+        case secondPressHeld
+        case activated
+
+        var description: String {
+            switch self {
+            case .idle: return "idle"
+            case .firstPressDown: return "firstPressDown"
+            case .waitingForSecondPress: return "waitingForSecondPress"
+            case .secondPressHeld: return "secondPressHeld"
+            case .activated: return "activated"
+            }
+        }
+    }
+
+    // MARK: - Configuration
+
     private let modifierKey: LongPressModifierKey
-    private let minimumDuration: TimeInterval
+    private let minimumDuration: TimeInterval  // Time to hold on second press before activation
     private let onActivate: () -> Void
     private let onRelease: () -> Void
 
+    // Double-tap timing constants
+    private let doubleTapInterval: TimeInterval = 0.3  // Max time between taps
+    private let firstTapMaxDuration: TimeInterval = 0.25  // Max duration for first tap
+
+    // MARK: - State
+
     private var globalEventMonitor: Any?
     private var localEventMonitor: Any?
-    private var pressStartTime: Date?
-    private var isActivated = false
-    private var lastReleaseTime: Date?
-    private let debounceInterval: TimeInterval = 0.5
+    private var state: State = .idle
+    private var firstPressTime: Date?
+    private var firstReleaseTime: Date?
+    private var secondPressTime: Date?
+    private var doubleTapTimeoutWorkItem: DispatchWorkItem?
 
     private let logger = Logger.hotkey
 
@@ -379,7 +411,7 @@ class ModifierKeyMonitor {
     func start() {
         stop() // Ensure no duplicate monitors
 
-        logger.info("Starting modifier key monitor for \(self.modifierKey.displayName)")
+        logger.info("Starting modifier key monitor for \(self.modifierKey.displayName) (double-tap-and-hold)")
 
         // Global monitor - captures events sent to OTHER applications
         globalEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
@@ -411,9 +443,19 @@ class ModifierKeyMonitor {
             NSEvent.removeMonitor(monitor)
             localEventMonitor = nil
         }
+        doubleTapTimeoutWorkItem?.cancel()
+        doubleTapTimeoutWorkItem = nil
         logger.info("Modifier key monitor stopped")
-        pressStartTime = nil
-        isActivated = false
+        resetState()
+    }
+
+    private func resetState() {
+        state = .idle
+        firstPressTime = nil
+        firstReleaseTime = nil
+        secondPressTime = nil
+        doubleTapTimeoutWorkItem?.cancel()
+        doubleTapTimeoutWorkItem = nil
     }
 
     private func handleFlagsChanged(_ event: NSEvent, source: String) {
@@ -428,65 +470,116 @@ class ModifierKeyMonitor {
         let isTargetPressed = flags.contains(targetFlag)
         let hasOtherModifiers = !flags.intersection(otherModifiers).isEmpty
 
-        logger.debug("[\(source)] flagsChanged: target=\(isTargetPressed), otherMods=\(hasOtherModifiers), isActivated=\(self.isActivated), pressStartTime=\(self.pressStartTime != nil)")
+        logger.debug("[\(source)] flagsChanged: target=\(isTargetPressed), otherMods=\(hasOtherModifiers), state=\(self.state.description)")
 
         // If other modifiers are pressed, abort any pending activation
         if hasOtherModifiers {
-            if pressStartTime != nil {
-                logger.debug("[\(source)] Other modifier detected, aborting activation")
-                pressStartTime = nil
-                isActivated = false
+            if state != .idle {
+                logger.debug("[\(source)] Other modifier detected, resetting state")
+                resetState()
             }
             return
         }
 
-        if isTargetPressed && pressStartTime == nil {
-            // Modifier key pressed - start timer
-            // Check debounce
-            if let lastRelease = lastReleaseTime,
-               Date().timeIntervalSince(lastRelease) < debounceInterval {
-                logger.debug("[\(source)] Debounce active, ignoring press")
-                return
+        // State machine transitions
+        switch state {
+        case .idle:
+            if isTargetPressed {
+                // First press detected
+                logger.debug("[\(source)] First press detected")
+                state = .firstPressDown
+                firstPressTime = Date()
             }
 
-            logger.debug("[\(source)] \(self.modifierKey.symbol) pressed, starting timer")
-            pressStartTime = Date()
+        case .firstPressDown:
+            if !isTargetPressed {
+                // First release - check if it was quick enough
+                guard let pressTime = firstPressTime else {
+                    resetState()
+                    return
+                }
 
-            // Schedule activation check after minimum duration
-            DispatchQueue.main.asyncAfter(deadline: .now() + minimumDuration) { [weak self] in
-                self?.checkActivation()
+                let pressDuration = Date().timeIntervalSince(pressTime)
+                if pressDuration <= firstTapMaxDuration {
+                    // Quick tap - wait for second press
+                    logger.debug("[\(source)] First tap completed (duration: \(String(format: "%.2f", pressDuration))s), waiting for second press")
+                    state = .waitingForSecondPress
+                    firstReleaseTime = Date()
+
+                    // Start timeout for double-tap interval
+                    let workItem = DispatchWorkItem { [weak self] in
+                        guard let self = self, self.state == .waitingForSecondPress else { return }
+                        self.logger.debug("Double-tap timeout, resetting state")
+                        self.resetState()
+                    }
+                    doubleTapTimeoutWorkItem = workItem
+                    DispatchQueue.main.asyncAfter(deadline: .now() + doubleTapInterval, execute: workItem)
+                } else {
+                    // Held too long for first tap - this is not a double-tap attempt
+                    logger.debug("[\(source)] First press held too long (\(String(format: "%.2f", pressDuration))s), resetting")
+                    resetState()
+                }
             }
 
-        } else if !isTargetPressed && pressStartTime != nil {
-            // Modifier key released
-            let pressDuration = pressStartTime.map { Date().timeIntervalSince($0) } ?? 0
-            logger.debug("[\(source)] \(self.modifierKey.symbol) released after \(String(format: "%.2f", pressDuration))s, isActivated=\(self.isActivated)")
+        case .waitingForSecondPress:
+            if isTargetPressed {
+                // Second press detected
+                guard let releaseTime = firstReleaseTime else {
+                    resetState()
+                    return
+                }
 
-            if isActivated {
-                // Was activated - trigger release callback
-                logger.info("[\(source)] Long-press release detected, triggering callback")
-                lastReleaseTime = Date()
+                let timeSinceRelease = Date().timeIntervalSince(releaseTime)
+                if timeSinceRelease <= doubleTapInterval {
+                    // Within double-tap window - start hold detection
+                    logger.debug("[\(source)] Second press detected (interval: \(String(format: "%.2f", timeSinceRelease))s), waiting for hold")
+                    state = .secondPressHeld
+                    secondPressTime = Date()
+                    doubleTapTimeoutWorkItem?.cancel()
+                    doubleTapTimeoutWorkItem = nil
+
+                    // Schedule activation check after minimum duration
+                    DispatchQueue.main.asyncAfter(deadline: .now() + minimumDuration) { [weak self] in
+                        self?.checkActivation()
+                    }
+                } else {
+                    // Too slow - treat as new first press
+                    logger.debug("[\(source)] Second press too slow, treating as new first press")
+                    resetState()
+                    state = .firstPressDown
+                    firstPressTime = Date()
+                }
+            }
+
+        case .secondPressHeld:
+            if !isTargetPressed {
+                // Released before activation threshold
+                let pressDuration = secondPressTime.map { Date().timeIntervalSince($0) } ?? 0
+                logger.debug("[\(source)] Second press released before activation (duration: \(String(format: "%.2f", pressDuration))s)")
+                resetState()
+            }
+
+        case .activated:
+            if !isTargetPressed {
+                // Released after activation - trigger release callback
+                logger.info("[\(source)] Double-tap-and-hold release detected, triggering callback")
                 onRelease()
-            } else {
-                // Released before activation threshold - just a quick tap
-                logger.debug("[\(source)] Released before threshold, ignoring")
+                resetState()
             }
-
-            pressStartTime = nil
-            isActivated = false
-        } else if !isTargetPressed && pressStartTime == nil && isActivated {
-            // Edge case: release detected but pressStartTime was already cleared
-            logger.warning("[\(source)] Release detected but pressStartTime is nil, isActivated=\(self.isActivated)")
         }
     }
 
     private func checkActivation() {
-        // Verify the key is still pressed and enough time has passed
-        guard let startTime = pressStartTime else {
+        // Verify we're still in secondPressHeld state and the key is still pressed
+        guard state == .secondPressHeld else {
             return
         }
 
-        let elapsed = Date().timeIntervalSince(startTime)
+        guard let pressTime = secondPressTime else {
+            return
+        }
+
+        let elapsed = Date().timeIntervalSince(pressTime)
         guard elapsed >= minimumDuration else {
             return
         }
@@ -495,12 +588,13 @@ class ModifierKeyMonitor {
         let currentFlags = NSEvent.modifierFlags
         guard currentFlags.contains(modifierKey.modifierFlag) else {
             logger.debug("Modifier released before activation")
+            resetState()
             return
         }
 
         // Activate
-        logger.info("Long-press threshold reached, activating")
-        isActivated = true
+        logger.info("Double-tap-and-hold threshold reached, activating")
+        state = .activated
         onActivate()
     }
 
