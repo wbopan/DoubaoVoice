@@ -39,6 +39,8 @@ class TranscriptionViewModel: ObservableObject {
 
     private var recordingState: RecordingState = .idle
     private var recordingTask: Task<Void, Never>?
+    private var stopTask: Task<Void, Never>?
+    private var audioActuallyStarted = false  // Track if audio recording was actually started
 
     private let audioRecorder = AudioRecorder()
     private let asrClient = DoubaoASRClient()
@@ -77,11 +79,19 @@ class TranscriptionViewModel: ObservableObject {
 
     /// Start recording and transcription
     func startRecording() {
+        log(.debug, "startRecording() called, current state: \(recordingState)")
+
+        // If currently stopping, wait for it to complete before starting
+        if recordingState == .stopping {
+            log(.info, "Currently stopping, will wait for completion before starting")
+        }
+
         // Cancel any existing recording task
         recordingTask?.cancel()
 
         // Set connecting state IMMEDIATELY (before any async work)
         recordingState = .connecting
+        audioActuallyStarted = false  // Reset flag
 
         // Clear previous state
         transcribedText = ""
@@ -92,6 +102,20 @@ class TranscriptionViewModel: ObservableObject {
         // Store Task reference for cancellation
         recordingTask = Task {
             do {
+                // Wait for any in-progress stop operation to complete
+                if let pendingStop = stopTask {
+                    log(.debug, "Waiting for previous stop operation to complete...")
+                    await pendingStop.value
+                    stopTask = nil  // Clear the completed stop task
+                    log(.debug, "Previous stop operation completed")
+                }
+
+                // Double-check we're still in connecting state (could have been cancelled while waiting)
+                guard recordingState == .connecting else {
+                    log(.info, "Recording state changed while waiting, aborting start")
+                    return
+                }
+
                 // Check for cancellation before starting
                 try Task.checkCancellation()
 
@@ -144,6 +168,9 @@ class TranscriptionViewModel: ObservableObject {
                     }
                 )
 
+                // Mark that audio recording was actually started
+                audioActuallyStarted = true
+
                 // Only set .recording after audio actually starts
                 recordingState = .recording
                 statusMessage = "Recording..."
@@ -168,25 +195,33 @@ class TranscriptionViewModel: ObservableObject {
 
     /// Stop recording and wait for final transcription
     func stopRecording() {
-        Task {
-            // Prevent re-entry
-            guard recordingState != .stopping && recordingState != .idle else {
-                log(.debug, "stopRecording() called but already stopping or idle")
-                return
+        log(.debug, "stopRecording() called, current state: \(recordingState)")
+
+        // Prevent re-entry
+        guard recordingState != .stopping && recordingState != .idle else {
+            log(.debug, "stopRecording() called but already stopping or idle, ignoring")
+            return
+        }
+
+        let previousState = recordingState
+        let wasAudioStarted = audioActuallyStarted  // Capture before state change
+        recordingState = .stopping
+        statusMessage = "Stopping..."
+
+        log(.info, "Stopping transcription session (previous state: \(previousState), audioStarted: \(wasAudioStarted))...")
+
+        // Cancel recording task if still running
+        recordingTask?.cancel()
+        recordingTask = nil
+
+        // Store stop task so startRecording can wait for it
+        stopTask = Task {
+            // Only stop audio recording if it was actually started
+            if wasAudioStarted {
+                await audioRecorder.stopRecording()
+            } else {
+                log(.debug, "Skipping audio stop - recording was never started")
             }
-
-            let previousState = recordingState
-            recordingState = .stopping
-            statusMessage = "Stopping..."
-
-            log(.info, "Stopping transcription session (previous state: \(previousState))...")
-
-            // Cancel recording task if still running
-            recordingTask?.cancel()
-            recordingTask = nil
-
-            // ALWAYS stop audio recording, regardless of state
-            await audioRecorder.stopRecording()
 
             // Handle ASR cleanup based on previous state
             if previousState == .recording {
@@ -224,6 +259,7 @@ class TranscriptionViewModel: ObservableObject {
             }
 
             recordingState = .idle
+            audioActuallyStarted = false
             audioLevel = 0.0
         }
     }
@@ -281,8 +317,11 @@ class TranscriptionViewModel: ObservableObject {
 
     /// Cleanup helper - stops audio and disconnects ASR
     private func performCleanup() async {
-        await audioRecorder.stopRecording()
+        if audioActuallyStarted {
+            await audioRecorder.stopRecording()
+        }
         await asrClient.disconnect()
+        audioActuallyStarted = false
     }
 
     /// Update audio level with smoothing
