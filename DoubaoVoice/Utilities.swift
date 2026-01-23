@@ -14,16 +14,16 @@ import OSLog
 
 // MARK: - Constants
 
-enum DoubaoConstants {
-    static let apiURL = "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async"
-    static let sampleRate: Double = 16000
-    static let channels: UInt32 = 1
-    static let segmentDuration: TimeInterval = 0.2 // 200ms
-    static let segmentSampleCount = Int(sampleRate * segmentDuration) // 3200 samples
-    static let bytesPerSample = 2 // int16
-    static let segmentByteSize = segmentSampleCount * bytesPerSample // 6400 bytes
-    static let shutdownTimeout: TimeInterval = 1.5
-    static let resourceID = "volc.seedasr.sauc.duration"
+enum DoubaoConstants: Sendable {
+    static nonisolated let apiURL = "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async"
+    static nonisolated let sampleRate: Double = 16000
+    static nonisolated let channels: UInt32 = 1
+    static nonisolated let segmentDuration: TimeInterval = 0.2 // 200ms
+    static nonisolated let segmentSampleCount = Int(sampleRate * segmentDuration) // 3200 samples
+    static nonisolated let bytesPerSample = 2 // int16
+    static nonisolated let segmentByteSize = segmentSampleCount * bytesPerSample // 6400 bytes
+    static nonisolated let shutdownTimeout: TimeInterval = 1.5
+    static nonisolated let resourceID = "volc.seedasr.sauc.duration"
 }
 
 // MARK: - Models
@@ -60,7 +60,7 @@ struct ASRConfig: Sendable {
     }
 
     /// Generate full JSON payload for initial request (matches Python reference)
-    func toFullRequestJSON() -> [String: Any] {
+    nonisolated func toFullRequestJSON() -> [String: Any] {
         return [
             "user": [
                 "uid": "doubaovoice_user"
@@ -93,11 +93,11 @@ struct ASRResult: Sendable {
     let code: Int
     let message: String
 
-    var isSuccess: Bool {
+    nonisolated var isSuccess: Bool {
         code == 0 || code == 1000
     }
 
-    init(text: String = "", isLastPackage: Bool = false, sequence: Int = 0, code: Int = 0, message: String = "") {
+    nonisolated init(text: String = "", isLastPackage: Bool = false, sequence: Int = 0, code: Int = 0, message: String = "") {
         self.text = text
         self.isLastPackage = isLastPackage
         self.sequence = sequence
@@ -186,11 +186,11 @@ struct ProtocolHeader {
     let flags: UInt8  // Message type specific flags
 
     // Message type specific flags (matches Python reference)
-    enum MessageTypeFlags {
-        static let noSequence: UInt8 = 0b0000
-        static let posSequence: UInt8 = 0b0001       // Positive sequence number present
-        static let negSequence: UInt8 = 0b0010       // Negative sequence (final packet)
-        static let negWithSequence: UInt8 = 0b0011   // Both flags set
+    enum MessageTypeFlags: Sendable {
+        static nonisolated let noSequence: UInt8 = 0b0000
+        static nonisolated let posSequence: UInt8 = 0b0001       // Positive sequence number present
+        static nonisolated let negSequence: UInt8 = 0b0010       // Negative sequence (final packet)
+        static nonisolated let negWithSequence: UInt8 = 0b0011   // Both flags set
     }
 
     // Byte 2: Serialization (4 bits) | Compression (4 bits)
@@ -207,13 +207,13 @@ struct ProtocolHeader {
     // Byte 3: Reserved
     let reserved: UInt8 = 0x00
 
-    init(messageType: MessageType, flags: UInt8 = 0b0000, compression: Compression = .gzip) {
+    nonisolated init(messageType: MessageType, flags: UInt8 = 0b0000, compression: Compression = .gzip) {
         self.messageType = messageType
         self.flags = flags
         self.compression = compression
     }
 
-    func encode() -> Data {
+    nonisolated func encode() -> Data {
         var data = Data(capacity: 4)
 
         // Byte 0: [Version:4|HeaderSize:4]
@@ -252,7 +252,7 @@ struct ProtocolHeader {
 
 extension Data {
     /// Append Int32 in big-endian format
-    mutating func appendInt32BE(_ value: Int32) {
+    nonisolated mutating func appendInt32BE(_ value: Int32) {
         var bigEndian = value.bigEndian
         Swift.withUnsafeBytes(of: &bigEndian) { buffer in
             self.append(contentsOf: buffer)
@@ -260,7 +260,7 @@ extension Data {
     }
 
     /// Append UInt32 in big-endian format
-    mutating func appendUInt32BE(_ value: UInt32) {
+    nonisolated mutating func appendUInt32BE(_ value: UInt32) {
         var bigEndian = value.bigEndian
         Swift.withUnsafeBytes(of: &bigEndian) { buffer in
             self.append(contentsOf: buffer)
@@ -268,7 +268,7 @@ extension Data {
     }
 
     /// Append UInt32 in little-endian format
-    mutating func appendUInt32LE(_ value: UInt32) {
+    nonisolated mutating func appendUInt32LE(_ value: UInt32) {
         var littleEndian = value.littleEndian
         Swift.withUnsafeBytes(of: &littleEndian) { buffer in
             self.append(contentsOf: buffer)
@@ -276,7 +276,7 @@ extension Data {
     }
 
     /// Read Int32 from big-endian format
-    func readInt32BE(at offset: Int) -> Int32? {
+    nonisolated func readInt32BE(at offset: Int) -> Int32? {
         guard offset + 4 <= count else { return nil }
         let bytes = self[offset..<offset+4]
         return bytes.withUnsafeBytes { buffer in
@@ -285,7 +285,7 @@ extension Data {
     }
 
     /// Read UInt32 from big-endian format
-    func readUInt32BE(at offset: Int) -> UInt32? {
+    nonisolated func readUInt32BE(at offset: Int) -> UInt32? {
         guard offset + 4 <= count else { return nil }
         let bytes = self[offset..<offset+4]
         return bytes.withUnsafeBytes { buffer in
@@ -294,7 +294,7 @@ extension Data {
     }
 
     /// GZIP compress data using zlib (RFC 1952 compliant)
-    func gzipCompressed() -> Data? {
+    nonisolated func gzipCompressed() -> Data? {
         return self.withUnsafeBytes { (sourcePtr: UnsafeRawBufferPointer) -> Data? in
             guard let baseAddress = sourcePtr.baseAddress else { return nil }
 
@@ -328,10 +328,12 @@ extension Data {
             var outputBuffer = [UInt8](repeating: 0, count: chunkSize)
 
             repeat {
-                stream.avail_out = uInt(chunkSize)
-                stream.next_out = UnsafeMutablePointer<Bytef>(&outputBuffer)
+                outputBuffer.withUnsafeMutableBufferPointer { bufferPtr in
+                    stream.avail_out = uInt(chunkSize)
+                    stream.next_out = bufferPtr.baseAddress
 
-                status = deflate(&stream, Z_FINISH)
+                    status = deflate(&stream, Z_FINISH)
+                }
 
                 guard status >= 0 else { return nil }
 
@@ -347,7 +349,7 @@ extension Data {
     }
 
     /// GZIP decompress data using zlib
-    func gzipDecompressed() -> Data? {
+    nonisolated func gzipDecompressed() -> Data? {
         return self.withUnsafeBytes { (sourcePtr: UnsafeRawBufferPointer) -> Data? in
             guard let baseAddress = sourcePtr.baseAddress else { return nil }
 
@@ -377,10 +379,12 @@ extension Data {
             var outputBuffer = [UInt8](repeating: 0, count: chunkSize)
 
             repeat {
-                stream.avail_out = uInt(chunkSize)
-                stream.next_out = UnsafeMutablePointer<Bytef>(&outputBuffer)
+                outputBuffer.withUnsafeMutableBufferPointer { bufferPtr in
+                    stream.avail_out = uInt(chunkSize)
+                    stream.next_out = bufferPtr.baseAddress
 
-                status = inflate(&stream, Z_NO_FLUSH)
+                    status = inflate(&stream, Z_NO_FLUSH)
+                }
 
                 guard status >= 0 || status == Z_BUF_ERROR else { return nil }
 
@@ -416,25 +420,25 @@ enum LogLevel {
 
 /// Logger extensions with categorized loggers for different subsystems
 extension Logger {
-    private nonisolated(unsafe) static let subsystem = Bundle.main.bundleIdentifier ?? "com.doubaovoice"
+    private static nonisolated let subsystem = Bundle.main.bundleIdentifier ?? "com.doubaovoice"
 
     /// Logger for audio recording and processing
-    static let audio = Logger(subsystem: subsystem, category: "Audio")
+    static nonisolated let audio = Logger(subsystem: subsystem, category: "Audio")
 
     /// Logger for ASR (Automatic Speech Recognition) operations
-    static let asr = Logger(subsystem: subsystem, category: "ASR")
+    static nonisolated let asr = Logger(subsystem: subsystem, category: "ASR")
 
     /// Logger for UI and window management
-    static let ui = Logger(subsystem: subsystem, category: "UI")
+    static nonisolated let ui = Logger(subsystem: subsystem, category: "UI")
 
     /// Logger for network/WebSocket operations
-    static let network = Logger(subsystem: subsystem, category: "Network")
+    static nonisolated let network = Logger(subsystem: subsystem, category: "Network")
 
     /// Logger for hotkey and system events
-    static let hotkey = Logger(subsystem: subsystem, category: "Hotkey")
+    static nonisolated let hotkey = Logger(subsystem: subsystem, category: "Hotkey")
 
     /// Logger for general/uncategorized logs
-    nonisolated(unsafe) static let general = Logger(subsystem: subsystem, category: "General")
+    static nonisolated let general = Logger(subsystem: subsystem, category: "General")
 }
 
 /// Unified logging function using Apple's OSLog framework

@@ -297,7 +297,7 @@ class GlobalHotkeyManager {
         }
 
         // Create hotkey ID
-        var hotKeyID = EventHotKeyID(signature: OSType("DBVC".fourCharCode), id: 1)
+        let hotKeyID = EventHotKeyID(signature: OSType("DBVC".fourCharCode), id: 1)
 
         // Install event handler
         var eventSpec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))

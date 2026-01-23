@@ -236,7 +236,7 @@ class TranscriptionViewModel: ObservableObject {
         statusMessage = "Finishing..."
 
         // Stop recording (reuse existing logic)
-        await stopRecording()
+        stopRecording()
 
         // Copy to clipboard if we have text
         guard !transcribedText.isEmpty else {

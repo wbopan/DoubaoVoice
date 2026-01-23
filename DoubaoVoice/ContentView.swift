@@ -45,7 +45,7 @@ struct ContentView: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding()
-                    .onChange(of: viewModel.transcribedText) { _ in
+                    .onChange(of: viewModel.transcribedText) {
                         // Auto-scroll to bottom when text updates
                         withAnimation {
                             proxy.scrollTo("transcriptionText", anchor: .bottom)

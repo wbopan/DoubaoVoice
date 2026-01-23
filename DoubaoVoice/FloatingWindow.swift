@@ -301,7 +301,7 @@ class FloatingWindowController: NSWindowController {
         // Brief delay before switching apps
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
             // Activate the previous application
-            previousApp.activate(options: [.activateIgnoringOtherApps])
+            previousApp.activate()
 
             // Wait for app to become active, then simulate Cmd+V
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
