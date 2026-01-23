@@ -183,14 +183,7 @@ struct ControlsSettingsTab: View {
                     Spacer()
 
                     HotkeyInputCapsule(
-                        hotkey: Binding(
-                            get: { settings.globalHotkey },
-                            set: { newValue in
-                                print("🔧 Hotkey changed to: \(newValue.displayString)")
-                                settings.globalHotkey = newValue
-                                print("🔧 Settings updated (notification will be posted via didSet)")
-                            }
-                        ),
+                        hotkey: $settings.globalHotkey,
                         requireModifiers: true
                     )
                 }
@@ -288,20 +281,12 @@ struct DoubleTapHoldModifierSection: View {
 
     var body: some View {
         Section {
-            Toggle("Enable double-tap-and-hold", isOn: Binding(
-                get: { settings.longPressConfig.enabled },
-                set: { newValue in
-                    var config = settings.longPressConfig
-                    config.enabled = newValue
-                    settings.longPressConfig = config
-
-                    // Prompt for accessibility permission when enabling
-                    if newValue {
-                        _ = ModifierKeyMonitor.checkAccessibilityPermission(prompt: true)
-                        updateAccessibilityStatus()
-                    }
+            Toggle("Enable double-tap-and-hold", isOn: configBinding(\.enabled, onSet: { newValue in
+                if newValue {
+                    _ = ModifierKeyMonitor.checkAccessibilityPermission(prompt: true)
+                    updateAccessibilityStatus()
                 }
-            ))
+            }))
 
             if settings.longPressConfig.enabled {
                 // Accessibility permission status
@@ -327,14 +312,7 @@ struct DoubleTapHoldModifierSection: View {
 
                     Spacer()
 
-                    Picker("", selection: Binding(
-                        get: { settings.longPressConfig.modifierKey },
-                        set: { newValue in
-                            var config = settings.longPressConfig
-                            config.modifierKey = newValue
-                            settings.longPressConfig = config
-                        }
-                    )) {
+                    Picker("", selection: configBinding(\.modifierKey)) {
                         ForEach(LongPressModifierKey.allCases, id: \.self) { key in
                             Text("\(key.symbol) \(key.displayName)").tag(key)
                         }
@@ -347,14 +325,7 @@ struct DoubleTapHoldModifierSection: View {
                     Text("Hold duration:")
 
                     Slider(
-                        value: Binding(
-                            get: { settings.longPressConfig.minimumPressDuration },
-                            set: { newValue in
-                                var config = settings.longPressConfig
-                                config.minimumPressDuration = newValue
-                                settings.longPressConfig = config
-                            }
-                        ),
+                        value: configBinding(\.minimumPressDuration),
                         in: 0.1...1.0,
                         step: 0.1
                     )
@@ -364,14 +335,7 @@ struct DoubleTapHoldModifierSection: View {
                         .monospacedDigit()
                 }
 
-                Toggle("Auto-submit on release", isOn: Binding(
-                    get: { settings.longPressConfig.autoSubmitOnRelease },
-                    set: { newValue in
-                        var config = settings.longPressConfig
-                        config.autoSubmitOnRelease = newValue
-                        settings.longPressConfig = config
-                    }
-                ))
+                Toggle("Auto-submit on release", isOn: configBinding(\.autoSubmitOnRelease))
             }
         } header: {
             Text("Double-Tap-and-Hold")
@@ -384,6 +348,19 @@ struct DoubleTapHoldModifierSection: View {
         .onAppear {
             updateAccessibilityStatus()
         }
+    }
+
+    /// Create a binding to a LongPressConfig property with optional side effect
+    private func configBinding<T>(_ keyPath: WritableKeyPath<LongPressConfig, T>, onSet: ((T) -> Void)? = nil) -> Binding<T> {
+        Binding(
+            get: { settings.longPressConfig[keyPath: keyPath] },
+            set: { newValue in
+                var config = settings.longPressConfig
+                config[keyPath: keyPath] = newValue
+                settings.longPressConfig = config
+                onSet?(newValue)
+            }
+        )
     }
 
     private func updateAccessibilityStatus() {
@@ -606,22 +583,7 @@ class HotkeyRecorderBackgroundNSView: NSView {
             return
         }
 
-        var modifiers: UInt32 = 0
-
-        let flags = event.modifierFlags
-
-        if flags.contains(.command) {
-            modifiers |= UInt32(cmdKey)
-        }
-        if flags.contains(.option) {
-            modifiers |= UInt32(optionKey)
-        }
-        if flags.contains(.shift) {
-            modifiers |= UInt32(shiftKey)
-        }
-        if flags.contains(.control) {
-            modifiers |= UInt32(controlKey)
-        }
+        let modifiers = event.modifierFlags.carbonModifiers
 
         // For finish hotkey (Enter key), allow no modifiers (local scope)
         // For global hotkeys, require at least one modifier

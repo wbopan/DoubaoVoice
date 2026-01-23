@@ -497,7 +497,7 @@ extension Date {
 
 extension String {
     var isNotEmpty: Bool {
-        return !isEmpty
+        !isEmpty
     }
 
     /// Remove trailing punctuation (both full-width and half-width)
@@ -513,6 +513,18 @@ extension String {
             result.removeLast()
         }
         return result
+    }
+}
+
+extension NSEvent.ModifierFlags {
+    /// Convert NSEvent.ModifierFlags to Carbon modifier bitmask
+    var carbonModifiers: UInt32 {
+        var modifiers: UInt32 = 0
+        if contains(.command) { modifiers |= UInt32(cmdKey) }
+        if contains(.option) { modifiers |= UInt32(optionKey) }
+        if contains(.shift) { modifiers |= UInt32(shiftKey) }
+        if contains(.control) { modifiers |= UInt32(controlKey) }
+        return modifiers
     }
 }
 
@@ -626,35 +638,25 @@ struct HotkeyConfig: Codable, Equatable {
     )
 
     var isUnset: Bool {
-        return keyCode == 0 && modifiers == 0
+        keyCode == 0 && modifiers == 0
     }
 
     var displayString: String {
-        // Show "Not Set" for unset hotkeys
-        if isUnset {
-            return "Not Set"
-        }
+        guard !isUnset else { return "Not Set" }
 
-        var parts: [String] = []
+        // Build modifier symbols in standard order
+        let modifierSymbols: [(mask: UInt32, symbol: String)] = [
+            (UInt32(controlKey), "⌃"),
+            (UInt32(optionKey), "⌥"),
+            (UInt32(shiftKey), "⇧"),
+            (UInt32(cmdKey), "⌘")
+        ]
 
-        if modifiers & UInt32(controlKey) != 0 {
-            parts.append("⌃")
-        }
-        if modifiers & UInt32(optionKey) != 0 {
-            parts.append("⌥")
-        }
-        if modifiers & UInt32(shiftKey) != 0 {
-            parts.append("⇧")
-        }
-        if modifiers & UInt32(cmdKey) != 0 {
-            parts.append("⌘")
-        }
+        let parts = modifierSymbols
+            .filter { modifiers & $0.mask != 0 }
+            .map { $0.symbol }
+            + [keyCodeToString(keyCode)]
 
-        // Map common key codes to symbols
-        let keyString = keyCodeToString(keyCode)
-        parts.append(keyString)
-
-        // No spaces at all
         return parts.joined()
     }
 
@@ -817,23 +819,16 @@ class AppSettings: ObservableObject {
         }
     }
 
-    // Get saved window position if available
     func getSavedWindowPosition() -> NSPoint? {
-        // Only return saved position if in rememberLast mode
-        guard windowPositionMode == .rememberLast else { return nil }
-
-        let x = defaults.object(forKey: UserDefaultsKeys.windowPositionX) as? CGFloat
-        let y = defaults.object(forKey: UserDefaultsKeys.windowPositionY) as? CGFloat
-
-        if let x = x, let y = y {
-            return NSPoint(x: x, y: y)
+        guard windowPositionMode == .rememberLast,
+              let x = defaults.object(forKey: UserDefaultsKeys.windowPositionX) as? CGFloat,
+              let y = defaults.object(forKey: UserDefaultsKeys.windowPositionY) as? CGFloat else {
+            return nil
         }
-        return nil
+        return NSPoint(x: x, y: y)
     }
 
-    // Save window position
     func saveWindowPosition(_ position: NSPoint) {
-        // Only save position if in rememberLast mode
         guard windowPositionMode == .rememberLast else { return }
         defaults.set(position.x, forKey: UserDefaultsKeys.windowPositionX)
         defaults.set(position.y, forKey: UserDefaultsKeys.windowPositionY)
