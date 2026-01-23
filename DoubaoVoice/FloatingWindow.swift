@@ -18,17 +18,16 @@ class FloatingWindowController: NSWindowController {
     convenience init() {
         log(.debug, "FloatingWindowController init() starting")
 
-        // Create floating window
+        // Create floating window (minimal initial size)
         let window = FloatingWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 400, height: 300),
-            styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
+            contentRect: NSRect(x: 0, y: 0, width: 200, height: 70),
+            styleMask: [.borderless, .resizable],
             backing: .buffered,
             defer: false
         )
 
         log(.debug, "FloatingWindow created")
 
-        window.title = "DoubaoVoice"
         window.titlebarAppearsTransparent = true
         window.isMovableByWindowBackground = true
         window.level = .floating
@@ -42,11 +41,25 @@ class FloatingWindowController: NSWindowController {
 
         log(.debug, "Window properties set")
 
-        // Create SwiftUI view
+        // Create SwiftUI view with glass effect
         let contentView = FloatingTranscriptionView()
-        window.contentView = NSHostingView(rootView: contentView)
+        let hostingView = NSHostingView(rootView: contentView)
+        hostingView.autoresizingMask = [.width, .height]
 
-        log(.debug, "Content view set")
+        // Create glass effect base
+        let glassView = GlassEffectView(frame: window.contentView!.bounds)
+        glassView.autoresizingMask = [.width, .height]
+
+        // Make hosting view transparent
+        hostingView.layer?.backgroundColor = .clear
+
+        // Set up view hierarchy
+        glassView.addSubview(hostingView)
+        hostingView.frame = glassView.bounds
+
+        window.contentView = glassView
+
+        log(.debug, "Content view set with glass effect")
 
         // Restore saved position
         if let savedPosition = AppSettings.shared.getSavedWindowPosition() {
@@ -293,6 +306,47 @@ class FloatingWindow: NSPanel {
     }
 }
 
+// MARK: - Glass Effect View
+
+class GlassEffectView: NSView {
+    private let visualEffectView: NSVisualEffectView
+
+    override init(frame: NSRect) {
+        visualEffectView = NSVisualEffectView(frame: frame)
+        super.init(frame: frame)
+
+        // Configure glass effect
+        visualEffectView.material = .popover
+        visualEffectView.blendingMode = .behindWindow
+        visualEffectView.state = .active
+        visualEffectView.wantsLayer = true
+        visualEffectView.autoresizingMask = [.width, .height]
+
+        // Apply large corner radius
+        visualEffectView.layer?.cornerRadius = 28.0
+        visualEffectView.layer?.masksToBounds = true
+
+        addSubview(visualEffectView)
+
+        // Add subtle tint layer for glass aesthetic
+        let tintLayer = CALayer()
+        tintLayer.backgroundColor = CGColor(gray: 0.95, alpha: 0.3)
+        tintLayer.cornerRadius = 28.0
+        tintLayer.frame = bounds
+        tintLayer.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
+        visualEffectView.layer?.addSublayer(tintLayer)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) not implemented")
+    }
+
+    override func layout() {
+        super.layout()
+        visualEffectView.frame = bounds
+    }
+}
+
 // MARK: - Floating Transcription View
 
 struct FloatingTranscriptionView: View {
@@ -300,113 +354,154 @@ struct FloatingTranscriptionView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Status bar
-            HStack {
-                Circle()
-                    .fill(statusColor)
-                    .frame(width: 8, height: 8)
-
-                Text(viewModel.statusMessage)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-
-                Spacer()
-
-                // Finish button (only show when recording)
-                if viewModel.isRecording {
-                    Button(action: {
-                        finishRecording()
-                    }) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(.green)
-                            .imageScale(.small)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Finish and copy (\(AppSettings.shared.finishHotkey.displayString))")
+            // Text area - auto expand height, no scrollbar
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(viewModel.transcribedText)
+                        .font(.system(size: 15))
+                        .textSelection(.enabled)
+                        .animation(.easeInOut(duration: 0.2), value: viewModel.transcribedText)
                 }
-
-                // Close button
-                Button(action: {
-                    closeWindow()
-                }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.secondary)
-                        .imageScale(.small)
-                }
-                .buttonStyle(.plain)
-                .help("Hide window (ESC)")
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(.ultraThinMaterial)
-
-            Divider()
-
-            // Transcription text area
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 8) {
-                        if viewModel.transcribedText.isEmpty {
-                            Text("Listening...")
-                                .foregroundColor(.secondary)
-                                .italic()
-                                .frame(maxWidth: .infinity, alignment: .center)
-                                .padding()
-                        } else {
-                            Text(viewModel.transcribedText)
-                                .font(.body)
-                                .textSelection(.enabled)
-                                .padding()
-                                .id("transcriptionText")
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .onChange(of: viewModel.transcribedText) { _ in
-                        // Auto-scroll to bottom
-                        withAnimation {
-                            proxy.scrollTo("transcriptionText", anchor: .bottom)
-                        }
-                    }
-                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 20)
+                .padding(.top, 12)
+                .padding(.bottom, 4)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(.ultraThinMaterial)
 
-            // Error message
-            if let error = viewModel.errorMessage {
-                Divider()
+            // Button area - aligned to bottom right
+            HStack {
+                Spacer()
 
-                HStack {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(.orange)
-                        .imageScale(.small)
+                HStack(spacing: 8) {
+                    // Show loading indicator when preparing to record
+                    if !viewModel.isRecording && (viewModel.statusMessage == "Connecting..." || viewModel.statusMessage == "Connected") {
+                        ProgressView()
+                            .controlSize(.small)
+                            .frame(width: 32, height: 32)
+                            .background(
+                                Circle()
+                                    .fill(Color.primary.opacity(0.15))
+                            )
+                    }
+                    // Show buttons when recording
+                    else if viewModel.isRecording {
+                        // Always show close button when recording
+                        Button(action: {
+                            closeWindow()
+                        }) {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 14, weight: .bold))
+                        }
+                        .buttonStyle(CircularButtonStyle(isAccent: false))
+                        .help("Hide window (ESC)")
 
-                    Text(error)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .lineLimit(2)
+                        // Only show submit button when there's text
+                        if !viewModel.transcribedText.isEmpty {
+                            Button(action: {
+                                finishRecording()
+                            }) {
+                                Image(systemName: "arrow.up")
+                                    .font(.system(size: 14, weight: .bold))
+                            }
+                            .buttonStyle(CircularButtonStyle(isAccent: true))
+                            .help("Finish and copy (\(AppSettings.shared.finishHotkey.displayString))")
+                            .transition(.opacity)
+                        }
+                    }
+                    // Show close button when not recording (finished state)
+                    else {
+                        Button(action: {
+                            closeWindow()
+                        }) {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 14, weight: .bold))
+                        }
+                        .buttonStyle(CircularButtonStyle(isAccent: false))
+                        .help("Hide window (ESC)")
+                    }
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(.ultraThinMaterial)
+                .animation(.easeInOut(duration: 0.3), value: viewModel.transcribedText.isEmpty)
+                .padding(.horizontal, 20)
+                .padding(.top, 4)
+                .padding(.bottom, 12)
             }
         }
-        .frame(minWidth: 300, minHeight: 200)
+        .frame(minWidth: 150, minHeight: 70)
+        .onAppear {
+            // Adjust window size on initial appearance
+            DispatchQueue.main.async {
+                adjustWindowSize()
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .finishRecordingRequested)) { _ in
             finishRecording()
         }
+        .onChange(of: viewModel.transcribedText) {
+            adjustWindowSize()
+        }
     }
 
-    private var statusColor: Color {
-        if viewModel.isRecording {
-            return .red
-        } else if viewModel.errorMessage != nil {
-            return .orange
-        } else if viewModel.statusMessage.contains("Connected") || viewModel.statusMessage.contains("Completed") {
-            return .green
-        } else {
-            return .gray
-        }
+    private func adjustWindowSize() {
+        guard let window = NSApp.keyWindow else { return }
+
+        let text = viewModel.transcribedText
+
+        // Calculate text size (use single character placeholder if empty)
+        let displayText = text.isEmpty ? " " : text
+        let font = NSFont.systemFont(ofSize: 15)
+        let attributes: [NSAttributedString.Key: Any] = [.font: font]
+
+        // First, get the natural text width
+        let attributedString = NSAttributedString(string: displayText, attributes: attributes)
+        let naturalSize = attributedString.size()
+
+        // Define width constraints
+        let minWidth: CGFloat = 200
+        let maxWidth: CGFloat = 420 // 70% of original 600
+        let horizontalPadding: CGFloat = 56 // 40 for text (20 * 2) + 16 extra
+
+        // Calculate desired width based on text
+        let desiredTextWidth = min(max(naturalSize.width + 10, minWidth - horizontalPadding), maxWidth - horizontalPadding)
+        let finalWidth = desiredTextWidth + horizontalPadding
+
+        // Now calculate height with the determined width
+        let textRect = attributedString.boundingRect(
+            with: NSSize(width: desiredTextWidth, height: CGFloat.greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading]
+        )
+
+        let textHeight = ceil(textRect.height)
+        let buttonAreaHeight: CGFloat = 48 // 32 (button) + 4 (top padding) + 12 (bottom padding)
+        let textPadding: CGFloat = 16 // 12 (top) + 4 (bottom), horizontal is 20 per side
+
+        let maxTextHeight: CGFloat = 400
+        let constrainedTextHeight = min(textHeight, maxTextHeight)
+
+        let totalHeight = constrainedTextHeight + textPadding + buttonAreaHeight
+        let finalHeight = max(totalHeight, 70)
+
+        // Keep center position when resizing
+        let currentFrame = window.frame
+        let centerX = currentFrame.origin.x + currentFrame.width / 2
+        let centerY = currentFrame.origin.y + currentFrame.height / 2
+
+        let newX = centerX - finalWidth / 2
+        let newY = centerY - finalHeight / 2
+
+        let newFrame = NSRect(
+            x: newX,
+            y: newY,
+            width: finalWidth,
+            height: finalHeight
+        )
+
+        // Animate the resize
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = 0.2
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            window.animator().setFrame(newFrame, display: true)
+        })
     }
 
     private func closeWindow() {
@@ -434,6 +529,24 @@ struct FloatingTranscriptionView: View {
             // Close window
             closeWindow()
         }
+    }
+}
+
+// MARK: - Circular Button Style
+
+struct CircularButtonStyle: ButtonStyle {
+    let isAccent: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundColor(isAccent ? .white : .primary)
+            .frame(width: 32, height: 32)
+            .background(
+                Circle()
+                    .fill(isAccent ? Color.accentColor : Color.primary.opacity(configuration.isPressed ? 0.3 : 0.15))
+            )
+            .scaleEffect(configuration.isPressed ? 0.9 : 1.0)
+            .animation(.easeInOut(duration: 0.15), value: configuration.isPressed)
     }
 }
 
