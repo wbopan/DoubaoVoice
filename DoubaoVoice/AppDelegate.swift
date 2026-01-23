@@ -68,7 +68,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "DoubaoVoice")
+            button.image = NSImage(systemSymbolName: "waveform.circle.fill", accessibilityDescription: "DoubaoVoice")
             button.image?.isTemplate = true
         }
 
@@ -82,31 +82,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q"))
 
         statusItem.menu = menu
-
-        // Update icon color based on recording state
-        observeRecordingState()
-    }
-
-    private func observeRecordingState() {
-        // Observe the recording state and update icon color
-        Task { @MainActor in
-            for await _ in NotificationCenter.default.notifications(named: .recordingStateChanged).map({ _ in }) {
-                updateStatusIcon()
-            }
-        }
-    }
-
-    @MainActor
-    private func updateStatusIcon() {
-        guard let button = statusItem.button else { return }
-
-        if viewModel.isRecording {
-            button.image = NSImage(systemSymbolName: "mic.circle.fill", accessibilityDescription: "Recording")
-            button.contentTintColor = .systemRed
-        } else {
-            button.image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "DoubaoVoice")
-            button.contentTintColor = nil
-        }
     }
 
     // MARK: - Global Hotkey Setup
