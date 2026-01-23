@@ -462,6 +462,42 @@ class GlassEffectView: NSView {
     }
 }
 
+// MARK: - Waveform View
+
+struct WaveformView: View {
+    let audioLevel: Float
+    private let barCount = 5
+
+    // Fixed random offsets for each bar to create organic variation
+    private let barOffsets: [Float] = [0.7, 1.0, 0.85, 0.95, 0.75]
+
+    var body: some View {
+        HStack(spacing: 3) {
+            ForEach(0..<barCount, id: \.self) { index in
+                WaveformBar(level: barLevel(for: index))
+            }
+        }
+        .frame(height: 24)
+    }
+
+    private func barLevel(for index: Int) -> CGFloat {
+        let offset = barOffsets[index]
+        let minHeight: CGFloat = 0.15
+        return max(minHeight, CGFloat(audioLevel) * CGFloat(offset))
+    }
+}
+
+struct WaveformBar: View {
+    let level: CGFloat
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 1.5)
+            .fill(Color.primary.opacity(0.8))
+            .frame(width: 3, height: max(4, level * 20))
+            .animation(.easeInOut(duration: 0.12), value: level)
+    }
+}
+
 // MARK: - Floating Transcription View
 
 struct FloatingTranscriptionView: View {
@@ -484,8 +520,15 @@ struct FloatingTranscriptionView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            // Button area - aligned to bottom right
+            // Button area - waveform on left, buttons on right
             HStack {
+                // Waveform animation - only show when recording and connected
+                if viewModel.isRecording && !viewModel.isConnecting {
+                    WaveformView(audioLevel: viewModel.audioLevel)
+                        .padding(.leading, 20)
+                        .transition(.opacity.combined(with: .scale(scale: 0.8)))
+                }
+
                 Spacer()
 
                 HStack(spacing: 8) {
@@ -538,11 +581,11 @@ struct FloatingTranscriptionView: View {
                         .help("Hide window (ESC)")
                     }
                 }
-                .animation(.easeInOut(duration: 0.3), value: viewModel.transcribedText.isEmpty)
                 .padding(.horizontal, 20)
                 .padding(.top, 4)
                 .padding(.bottom, 12)
             }
+            .animation(.easeInOut(duration: 0.2), value: viewModel.isRecording)
         }
         .frame(minWidth: 150, minHeight: 70)
         .onAppear {

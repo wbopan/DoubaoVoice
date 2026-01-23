@@ -16,6 +16,7 @@ actor AudioRecorder {
     private var audioConverter: AVAudioConverter?
     private var isRecording = false
     private var audioCallback: ((Data) -> Void)?
+    private var audioLevelCallback: ((Float) -> Void)?
     private var segmentBuffer = Data()
 
     // Target audio format: 16kHz, 16-bit, mono PCM
@@ -29,7 +30,10 @@ actor AudioRecorder {
     // MARK: - Lifecycle
 
     /// Start recording audio
-    func startRecording(callback: @escaping (Data) -> Void) throws {
+    func startRecording(
+        callback: @escaping (Data) -> Void,
+        levelCallback: ((Float) -> Void)? = nil
+    ) throws {
         guard !isRecording else {
             log(.warning, "Already recording")
             return
@@ -38,6 +42,7 @@ actor AudioRecorder {
         log(.info, "Starting audio recording...")
 
         self.audioCallback = callback
+        self.audioLevelCallback = levelCallback
         self.segmentBuffer.removeAll()
 
         // Create audio engine
@@ -104,6 +109,7 @@ actor AudioRecorder {
         }
 
         audioCallback = nil
+        audioLevelCallback = nil
         log(.info, "Audio recording stopped")
     }
 
@@ -150,6 +156,24 @@ actor AudioRecorder {
         }
 
         let frameLength = Int(convertedBuffer.frameLength)
+
+        // Calculate RMS audio level for waveform visualization
+        let samples = channelData[0]
+        var sumSquares: Float = 0.0
+        for i in 0..<frameLength {
+            let sample = Float(samples[i]) / Float(Int16.max)
+            sumSquares += sample * sample
+        }
+        let rms = sqrt(sumSquares / Float(max(frameLength, 1)))
+        // Amplify RMS significantly for better visual response
+        let normalizedLevel = min(rms * 50.0, 1.0)
+
+        if let levelCallback = audioLevelCallback {
+            Task { @MainActor in
+                levelCallback(normalizedLevel)
+            }
+        }
+
         let data = Data(bytes: channelData[0], count: frameLength * DoubaoConstants.bytesPerSample)
 
         // Add to segment buffer

@@ -23,6 +23,9 @@ class TranscriptionViewModel: ObservableObject {
     @Published var transcribedText = ""
     @Published var errorMessage: String?
     @Published var statusMessage = "Ready"
+    @Published var audioLevel: Float = 0.0
+
+    private let levelSmoothingFactor: Float = 0.3
 
     // MARK: - Private Properties
 
@@ -130,11 +133,16 @@ class TranscriptionViewModel: ObservableObject {
                 try Task.checkCancellation()
 
                 // Start audio recording
-                try await audioRecorder.startRecording { [weak self] audioData in
-                    Task {
-                        await self?.sendAudioToASR(audioData)
+                try await audioRecorder.startRecording(
+                    callback: { [weak self] audioData in
+                        Task {
+                            await self?.sendAudioToASR(audioData)
+                        }
+                    },
+                    levelCallback: { [weak self] level in
+                        self?.updateAudioLevel(level)
                     }
-                }
+                )
 
                 // Only set .recording after audio actually starts
                 recordingState = .recording
@@ -216,6 +224,7 @@ class TranscriptionViewModel: ObservableObject {
             }
 
             recordingState = .idle
+            audioLevel = 0.0
         }
     }
 
@@ -274,6 +283,11 @@ class TranscriptionViewModel: ObservableObject {
     private func performCleanup() async {
         await audioRecorder.stopRecording()
         await asrClient.disconnect()
+    }
+
+    /// Update audio level with smoothing
+    private func updateAudioLevel(_ newLevel: Float) {
+        audioLevel = levelSmoothingFactor * newLevel + (1 - levelSmoothingFactor) * audioLevel
     }
 
     /// Send audio data to ASR service
