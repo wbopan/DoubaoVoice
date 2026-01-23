@@ -192,6 +192,26 @@ class FloatingWindowController: NSWindowController {
             log(.debug, "Captured previous active app: \(app.localizedName ?? "Unknown")")
         }
 
+        // Reset window to minimal size when showing
+        if let window = window {
+            let minSize = NSSize(width: 200, height: 70)
+            let currentOrigin = window.frame.origin
+
+            // Keep center position when resizing to minimum
+            let currentCenter = NSPoint(
+                x: currentOrigin.x + window.frame.width / 2,
+                y: currentOrigin.y + window.frame.height / 2
+            )
+
+            let newOrigin = NSPoint(
+                x: currentCenter.x - minSize.width / 2,
+                y: currentCenter.y - minSize.height / 2
+            )
+
+            window.setFrame(NSRect(origin: newOrigin, size: minSize), display: false)
+            log(.debug, "Reset window to minimal size: \(minSize)")
+        }
+
         // Recalculate window position based on current mode (except for rememberLast)
         if let window = window {
             let mode = settings.windowPositionMode
