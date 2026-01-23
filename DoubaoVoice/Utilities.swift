@@ -531,7 +531,70 @@ enum UserDefaultsKeys {
     static let autoPasteAfterClose = "DoubaoVoice.AutoPasteAfterClose"
     static let removeTrailingPunctuation = "DoubaoVoice.RemoveTrailingPunctuation"
 
+    // Long-press modifier key settings
+    static let longPressEnabled = "DoubaoVoice.LongPressEnabled"
+    static let longPressModifierKey = "DoubaoVoice.LongPressModifierKey"
+    static let longPressMinDuration = "DoubaoVoice.LongPressMinDuration"
+    static let longPressAutoSubmit = "DoubaoVoice.LongPressAutoSubmit"
+
     static let defaultPort = 18888
+}
+
+// MARK: - Long-Press Modifier Key
+
+/// Available modifier keys for long-press activation
+enum LongPressModifierKey: String, Codable, CaseIterable {
+    case option
+    case command
+    case control
+    case shift
+    case fn
+
+    var displayName: String {
+        switch self {
+        case .option: return "Option"
+        case .command: return "Command"
+        case .control: return "Control"
+        case .shift: return "Shift"
+        case .fn: return "Fn"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .option: return "⌥"
+        case .command: return "⌘"
+        case .control: return "⌃"
+        case .shift: return "⇧"
+        case .fn: return "fn"
+        }
+    }
+
+    /// The NSEvent.ModifierFlags corresponding to this key
+    var modifierFlag: NSEvent.ModifierFlags {
+        switch self {
+        case .option: return .option
+        case .command: return .command
+        case .control: return .control
+        case .shift: return .shift
+        case .fn: return .function
+        }
+    }
+}
+
+/// Configuration for long-press modifier key activation
+struct LongPressConfig: Codable, Equatable {
+    var enabled: Bool
+    var modifierKey: LongPressModifierKey
+    var minimumPressDuration: TimeInterval
+    var autoSubmitOnRelease: Bool
+
+    static let `default` = LongPressConfig(
+        enabled: false,
+        modifierKey: .option,
+        minimumPressDuration: 0.3,
+        autoSubmitOnRelease: true
+    )
 }
 
 // MARK: - Hotkey Configuration
@@ -689,6 +752,16 @@ class AppSettings: ObservableObject {
         didSet { defaults.set(removeTrailingPunctuation, forKey: UserDefaultsKeys.removeTrailingPunctuation) }
     }
 
+    @Published var longPressConfig: LongPressConfig {
+        didSet {
+            if let encoded = try? JSONEncoder().encode(longPressConfig) {
+                defaults.set(encoded, forKey: UserDefaultsKeys.longPressEnabled)
+            }
+            // Notify that long-press config has changed
+            NotificationCenter.default.post(name: .longPressConfigChanged, object: nil)
+        }
+    }
+
     private init() {
         // Load saved values or use defaults (from reference.py credentials)
         self.appKey = defaults.string(forKey: UserDefaultsKeys.appKey) ?? "3254061168"
@@ -724,6 +797,14 @@ class AppSettings: ObservableObject {
         self.autoPasteAfterClose = defaults.object(forKey: UserDefaultsKeys.autoPasteAfterClose) as? Bool ?? true
 
         self.removeTrailingPunctuation = defaults.object(forKey: UserDefaultsKeys.removeTrailingPunctuation) as? Bool ?? false
+
+        // Load long-press config
+        if let configData = defaults.data(forKey: UserDefaultsKeys.longPressEnabled),
+           let config = try? JSONDecoder().decode(LongPressConfig.self, from: configData) {
+            self.longPressConfig = config
+        } else {
+            self.longPressConfig = .default
+        }
 
         // Migrate: Remove deprecated resourceID setting
         if defaults.object(forKey: UserDefaultsKeys.resourceID) != nil {

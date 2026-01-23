@@ -199,6 +199,8 @@ struct ControlsSettingsTab: View {
                     .foregroundColor(.secondary)
             }
 
+            LongPressModifierSection(settings: settings)
+
             Section {
                 Toggle("Enable Voice Activity Detection", isOn: $settings.enableVAD)
             } header: {
@@ -248,6 +250,123 @@ struct ControlsSettingsTab: View {
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
+    }
+}
+
+// MARK: - Long-Press Modifier Section
+
+struct LongPressModifierSection: View {
+    @ObservedObject var settings: AppSettings
+    @State private var hasAccessibilityPermission = false
+
+    var body: some View {
+        Section {
+            Toggle("Enable long-press modifier", isOn: Binding(
+                get: { settings.longPressConfig.enabled },
+                set: { newValue in
+                    var config = settings.longPressConfig
+                    config.enabled = newValue
+                    settings.longPressConfig = config
+
+                    // Prompt for accessibility permission when enabling
+                    if newValue {
+                        _ = ModifierKeyMonitor.checkAccessibilityPermission(prompt: true)
+                        updateAccessibilityStatus()
+                    }
+                }
+            ))
+
+            if settings.longPressConfig.enabled {
+                // Accessibility permission status
+                HStack {
+                    Image(systemName: hasAccessibilityPermission ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                        .foregroundColor(hasAccessibilityPermission ? .green : .orange)
+
+                    Text(hasAccessibilityPermission ? "Accessibility permission granted" : "Accessibility permission required")
+                        .font(.caption)
+
+                    Spacer()
+
+                    if !hasAccessibilityPermission {
+                        Button("Open Settings") {
+                            openAccessibilitySettings()
+                        }
+                        .font(.caption)
+                    }
+                }
+
+                HStack {
+                    Text("Modifier key:")
+
+                    Spacer()
+
+                    Picker("", selection: Binding(
+                        get: { settings.longPressConfig.modifierKey },
+                        set: { newValue in
+                            var config = settings.longPressConfig
+                            config.modifierKey = newValue
+                            settings.longPressConfig = config
+                        }
+                    )) {
+                        ForEach(LongPressModifierKey.allCases, id: \.self) { key in
+                            Text("\(key.symbol) \(key.displayName)").tag(key)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 150)
+                }
+
+                HStack {
+                    Text("Minimum duration:")
+
+                    Slider(
+                        value: Binding(
+                            get: { settings.longPressConfig.minimumPressDuration },
+                            set: { newValue in
+                                var config = settings.longPressConfig
+                                config.minimumPressDuration = newValue
+                                settings.longPressConfig = config
+                            }
+                        ),
+                        in: 0.1...1.0,
+                        step: 0.1
+                    )
+
+                    Text(String(format: "%.1fs", settings.longPressConfig.minimumPressDuration))
+                        .frame(width: 40)
+                        .monospacedDigit()
+                }
+
+                Toggle("Auto-submit on release", isOn: Binding(
+                    get: { settings.longPressConfig.autoSubmitOnRelease },
+                    set: { newValue in
+                        var config = settings.longPressConfig
+                        config.autoSubmitOnRelease = newValue
+                        settings.longPressConfig = config
+                    }
+                ))
+            }
+        } header: {
+            Text("Long-Press Modifier")
+                .font(.headline)
+        } footer: {
+            Text("Hold the selected modifier key to start recording. Release to finish and auto-paste. This feature requires Accessibility permission.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+        .onAppear {
+            updateAccessibilityStatus()
+        }
+    }
+
+    private func updateAccessibilityStatus() {
+        hasAccessibilityPermission = ModifierKeyMonitor.checkAccessibilityPermission(prompt: false)
+    }
+
+    private func openAccessibilitySettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+            NSWorkspace.shared.open(url)
+        }
     }
 }
 
