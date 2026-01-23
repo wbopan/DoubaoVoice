@@ -57,6 +57,11 @@ class TranscriptionViewModel: ObservableObject {
         recordingState == .connecting
     }
 
+    /// Check if we're processing (waiting for final result)
+    var isProcessing: Bool {
+        recordingState == .stopping
+    }
+
     // MARK: - Initialization
 
     private init() {
@@ -274,6 +279,13 @@ class TranscriptionViewModel: ObservableObject {
         // Stop recording (reuse existing logic)
         stopRecording()
 
+        // Wait for stop task to complete (includes waiting for final result and second-pass)
+        if let pendingStop = stopTask {
+            log(.debug, "Waiting for stop task to complete...")
+            await pendingStop.value
+            log(.debug, "Stop task completed")
+        }
+
         // Copy to clipboard if we have text
         guard !transcribedText.isEmpty else {
             log(.warning, "No text to copy to clipboard")
@@ -308,7 +320,7 @@ class TranscriptionViewModel: ObservableObject {
 
     /// Request microphone permission
     private func requestMicrophonePermission() async -> Bool {
-        return await withCheckedContinuation { continuation in
+        await withCheckedContinuation { continuation in
             AVAudioApplication.requestRecordPermission { granted in
                 continuation.resume(returning: granted)
             }
@@ -360,18 +372,8 @@ class TranscriptionViewModel: ObservableObject {
                     log(.debug, "Applied punctuation removal: '\(result.text)' -> '\(processedText)'")
                 }
 
-                // For real-time updates, append new text
-                if transcribedText.isEmpty {
-                    transcribedText = processedText
-                } else {
-                    // Replace or append based on whether it's a final result
-                    if result.isLastPackage {
-                        transcribedText = processedText
-                    } else {
-                        // For interim results, just replace with the latest
-                        transcribedText = processedText
-                    }
-                }
+                // For both interim and final results, replace with the latest processed text
+                transcribedText = processedText
 
                 log(.debug, "Updated text: [\(processedText)] final:\(result.isLastPackage)")
             }

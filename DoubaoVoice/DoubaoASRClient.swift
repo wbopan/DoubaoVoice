@@ -319,8 +319,8 @@ actor DoubaoASRClient {
         log(.info, "Final packet sent")
     }
 
-    /// Wait for final result with timeout
-    func waitForFinalResult(timeout: TimeInterval = DoubaoConstants.shutdownTimeout) async -> ASRResult? {
+    /// Wait for final result with timeout (3 seconds)
+    func waitForFinalResult(timeout: TimeInterval = 3.0) async -> ASRResult? {
         log(.info, "Waiting for final result (timeout: \(timeout)s)...")
 
         do {
@@ -331,19 +331,21 @@ actor DoubaoASRClient {
                     while await !self.receivedFinalResult {
                         try await Task.sleep(nanoseconds: 100_000_000) // 100ms
                     }
+                    log(.info, "Final result received")
                     return nil
                 }
 
                 // Task 2: Timeout
                 group.addTask {
                     try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                    log(.info, "Wait timeout reached")
                     return nil
                 }
 
                 // Wait for first to complete
-                let result = try await group.next()
+                let result = try await group.next() ?? nil
                 group.cancelAll()
-                return result ?? nil
+                return result
             }
         } catch {
             log(.warning, "Wait for final result interrupted: \(error)")
@@ -412,14 +414,14 @@ actor DoubaoASRClient {
             log(.error, "ASR error - code:\(result.code) message:\(result.message)")
         }
 
-        // Mark if this is the final result
-        if result.isLastPackage {
-            receivedFinalResult = true
-            log(.info, "Received final result")
-        }
-
-        // Emit result to stream
+        // Emit result to stream FIRST (fixes race condition)
         resultContinuation?.yield(result)
+
+        // THEN mark completion
+        if result.isLastPackage {
+            log(.info, "Received final result")
+            receivedFinalResult = true
+        }
     }
 }
 

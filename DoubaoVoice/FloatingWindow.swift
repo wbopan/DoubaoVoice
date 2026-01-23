@@ -392,27 +392,10 @@ class FloatingWindow: NSPanel {
                 return event
             }
 
-            if event.keyCode == UInt16(finishConfig.keyCode) {
-                let expectedModifiers = finishConfig.modifiers
-                var actualModifiers: UInt32 = 0
-
-                if event.modifierFlags.contains(.command) {
-                    actualModifiers |= UInt32(cmdKey)
-                }
-                if event.modifierFlags.contains(.option) {
-                    actualModifiers |= UInt32(optionKey)
-                }
-                if event.modifierFlags.contains(.shift) {
-                    actualModifiers |= UInt32(shiftKey)
-                }
-                if event.modifierFlags.contains(.control) {
-                    actualModifiers |= UInt32(controlKey)
-                }
-
-                if actualModifiers == expectedModifiers {
-                    NotificationCenter.default.post(name: .finishRecordingRequested, object: nil)
-                    return nil
-                }
+            if event.keyCode == UInt16(finishConfig.keyCode) &&
+               event.modifierFlags.carbonModifiers == finishConfig.modifiers {
+                NotificationCenter.default.post(name: .finishRecordingRequested, object: nil)
+                return nil
             }
 
             return event
@@ -531,15 +514,11 @@ struct FloatingTranscriptionView: View {
 
                 GlassEffectContainer(spacing: 8) {
                     HStack(spacing: 8) {
-                        // Show loading indicator when connecting
-                        if viewModel.isConnecting {
+                        if viewModel.isConnecting || viewModel.isProcessing {
                             ProgressView()
                                 .controlSize(.small)
                                 .frame(width: 32, height: 32)
-                        }
-                        // Show buttons when recording (fully connected and recording)
-                        else if viewModel.isRecording {
-                            // Always show close button when recording
+                        } else {
                             CircularGlassButton(
                                 systemName: "xmark",
                                 isAccent: false,
@@ -548,8 +527,7 @@ struct FloatingTranscriptionView: View {
                             .glassEffectID("close", in: buttonNamespace)
                             .help("Hide window (ESC)")
 
-                            // Only show submit button when there's text
-                            if !viewModel.transcribedText.isEmpty {
+                            if viewModel.isRecording && !viewModel.transcribedText.isEmpty {
                                 CircularGlassButton(
                                     systemName: "arrow.up",
                                     isAccent: true,
@@ -561,16 +539,6 @@ struct FloatingTranscriptionView: View {
                                     : "Finish and copy (\(AppSettings.shared.finishHotkey.displayString))")
                                 .transition(.opacity)
                             }
-                        }
-                        // Show close button when not recording (finished state)
-                        else {
-                            CircularGlassButton(
-                                systemName: "xmark",
-                                isAccent: false,
-                                action: closeWindow
-                            )
-                            .glassEffectID("close", in: buttonNamespace)
-                            .help("Hide window (ESC)")
                         }
                     }
                 }
