@@ -257,6 +257,9 @@ class FloatingWindowController: NSWindowController {
             }
         }
 
+        // Notify SwiftUI view to adjust window size (fixes size issue after empty-text close)
+        NotificationCenter.default.post(name: .floatingWindowDidShow, object: nil)
+
         log(.info, "Floating window shown, recording started")
     }
 
@@ -597,6 +600,11 @@ struct FloatingTranscriptionView: View {
         .onReceive(NotificationCenter.default.publisher(for: .finishRecordingRequested)) { _ in
             finishRecording()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .floatingWindowDidShow)) { _ in
+            DispatchQueue.main.async {
+                adjustWindowSize()
+            }
+        }
         .onChange(of: viewModel.transcribedText) {
             adjustWindowSize()
         }
@@ -719,4 +727,5 @@ struct CircularButtonStyle: ButtonStyle {
 
 extension Notification.Name {
     static let finishRecordingRequested = Notification.Name("finishRecordingRequested")
+    static let floatingWindowDidShow = Notification.Name("floatingWindowDidShow")
 }
