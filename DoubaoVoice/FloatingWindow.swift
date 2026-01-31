@@ -311,14 +311,28 @@ class FloatingWindowController: NSWindowController {
         }
 
         if let context = AccessibilityTextCapture.shared.captureFromFocusedApp() {
-            // Truncate to max length setting
-            let truncatedContext = context.truncated(to: settings.maxContextLength)
-            capturedContext = truncatedContext
+            // Process context using ContextProcessor for keyword extraction
+            Task {
+                let processed = await ContextProcessor.shared.process(
+                    text: context.text,
+                    maxLength: settings.maxContextLength
+                )
 
-            logger.info("Captured \(truncatedContext.text.count) chars from \(truncatedContext.applicationName)")
+                let processedContext = CapturedTextContext(
+                    text: processed.text,
+                    documentPath: context.documentPath,
+                    applicationName: context.applicationName,
+                    bundleIdentifier: context.bundleIdentifier,
+                    capturedAt: context.capturedAt
+                )
 
-            // Pass the captured context to the view model
-            viewModel.setCapturedContext(truncatedContext)
+                await MainActor.run {
+                    capturedContext = processedContext
+                    viewModel.setCapturedContext(processedContext)
+                }
+
+                logger.info("Processed context: \(processed.originalLength) -> \(processed.text.count) chars from \(context.applicationName)")
+            }
         } else {
             // Don't clear existing context if capture fails
             logger.info("No context captured from previous app, keeping existing context")
