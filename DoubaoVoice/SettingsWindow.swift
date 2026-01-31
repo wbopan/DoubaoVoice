@@ -101,6 +101,10 @@ struct SettingsView: View {
             tempAccessKey = settings.accessKey
             tempContext = settings.context
         }
+        .onChange(of: settings.context) { _, newValue in
+            // Sync tempContext when settings.context is updated externally (e.g., by context capture)
+            tempContext = newValue
+        }
     }
 
     private func saveSettings() {
