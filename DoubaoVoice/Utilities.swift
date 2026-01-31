@@ -38,6 +38,7 @@ struct ASRConfig: Sendable {
     let format: String
     let sampleRate: Int
     let bits: Int
+    let contextLines: [String]
 
     init(
         appKey: String,
@@ -47,7 +48,8 @@ struct ASRConfig: Sendable {
         language: String = "zh-CN",
         format: String = "pcm",
         sampleRate: Int = Int(DoubaoConstants.sampleRate),
-        bits: Int = 16
+        bits: Int = 16,
+        contextLines: [String] = []
     ) {
         self.appKey = appKey
         self.accessKey = accessKey
@@ -57,10 +59,43 @@ struct ASRConfig: Sendable {
         self.format = format
         self.sampleRate = sampleRate
         self.bits = bits
+        self.contextLines = contextLines
     }
 
     /// Generate full JSON payload for initial request (matches Python reference)
     nonisolated func toFullRequestJSON() -> [String: Any] {
+        var request: [String: Any] = [
+            "model_name": "bigmodel",
+            "enable_itn": true,
+            "enable_punc": true,
+            "enable_ddc": true,
+            "show_utterances": true,
+            "enable_nonstream": true,
+            "end_window_size": 1000
+        ]
+
+        // Add dialog context under corpus.context (per API documentation)
+        if !contextLines.isEmpty {
+            // Use dialog context format - combine all lines as context
+            let contextText = contextLines.joined(separator: " ")
+            let contextDict: [String: Any] = [
+                "context_type": "dialog_ctx",
+                "context_data": [["text": contextText]]
+            ]
+            if let contextData = try? JSONSerialization.data(withJSONObject: contextDict),
+               let contextString = String(data: contextData, encoding: .utf8) {
+                request["corpus"] = ["context": contextString]
+                #if DEBUG
+                print("[ℹ️] ASR - Including dialog context: \(contextText)")
+                print("[🔍] ASR - Dialog corpus.context: \(contextString)")
+                #endif
+            }
+        } else {
+            #if DEBUG
+            print("[🔍] ASR - No dialog context configured")
+            #endif
+        }
+
         return [
             "user": [
                 "uid": "doubaovoice_user"
@@ -72,15 +107,7 @@ struct ASRConfig: Sendable {
                 "bits": bits,
                 "channel": 1
             ],
-            "request": [
-                "model_name": "bigmodel",
-                "enable_itn": true,
-                "enable_punc": true,
-                "enable_ddc": true,
-                "show_utterances": true,
-                "enable_nonstream": true,
-                "end_window_size": 1000
-            ]
+            "request": request
         ]
     }
 }
@@ -439,6 +466,9 @@ extension Logger {
 
     /// Logger for general/uncategorized logs
     static nonisolated let general = Logger(subsystem: subsystem, category: "General")
+
+    /// Logger for accessibility-related operations
+    static nonisolated let accessibility = Logger(subsystem: subsystem, category: "Accessibility")
 }
 
 /// Unified logging function using Apple's OSLog framework
@@ -552,8 +582,15 @@ enum UserDefaultsKeys {
     static let longPressModifierKey = "DoubaoVoice.LongPressModifierKey"
     static let longPressMinDuration = "DoubaoVoice.LongPressMinDuration"
     static let longPressAutoSubmit = "DoubaoVoice.LongPressAutoSubmit"
+    static let context = "DoubaoVoice.Context"
+
+    // Context capture settings
+    static let contextCaptureEnabled = "DoubaoVoice.ContextCaptureEnabled"
+    static let autoCaptureOnActivate = "DoubaoVoice.AutoCaptureOnActivate"
+    static let maxContextLength = "DoubaoVoice.MaxContextLength"
 
     static let defaultPort = 18888
+    static let defaultMaxContextLength = 2000
 }
 
 // MARK: - Long-Press Modifier Key
@@ -768,6 +805,22 @@ class AppSettings: ObservableObject {
         }
     }
 
+    @Published var context: String {
+        didSet { defaults.set(context, forKey: UserDefaultsKeys.context) }
+    }
+
+    @Published var contextCaptureEnabled: Bool {
+        didSet { defaults.set(contextCaptureEnabled, forKey: UserDefaultsKeys.contextCaptureEnabled) }
+    }
+
+    @Published var autoCaptureOnActivate: Bool {
+        didSet { defaults.set(autoCaptureOnActivate, forKey: UserDefaultsKeys.autoCaptureOnActivate) }
+    }
+
+    @Published var maxContextLength: Int {
+        didSet { defaults.set(maxContextLength, forKey: UserDefaultsKeys.maxContextLength) }
+    }
+
     private init() {
         // Load saved values or use defaults (from reference.py credentials)
         self.appKey = defaults.string(forKey: UserDefaultsKeys.appKey) ?? "3254061168"
@@ -811,6 +864,14 @@ class AppSettings: ObservableObject {
         } else {
             self.longPressConfig = .default
         }
+
+        // Load context
+        self.context = defaults.string(forKey: UserDefaultsKeys.context) ?? ""
+
+        // Load context capture settings
+        self.contextCaptureEnabled = defaults.object(forKey: UserDefaultsKeys.contextCaptureEnabled) as? Bool ?? false
+        self.autoCaptureOnActivate = defaults.object(forKey: UserDefaultsKeys.autoCaptureOnActivate) as? Bool ?? true
+        self.maxContextLength = defaults.object(forKey: UserDefaultsKeys.maxContextLength) as? Int ?? UserDefaultsKeys.defaultMaxContextLength
 
         // Migrate: Remove deprecated resourceID setting
         if defaults.object(forKey: UserDefaultsKeys.resourceID) != nil {

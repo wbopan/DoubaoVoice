@@ -16,6 +16,7 @@ class FloatingWindowController: NSWindowController {
     private let settings = AppSettings.shared
     private var previousActiveApp: NSRunningApplication?
     private let logger = Logger.ui
+    private var capturedContext: CapturedTextContext?
 
     /// Calculate window position based on the selected mode
     private static func calculateWindowPosition(mode: WindowPositionMode, windowSize: NSSize, settings: AppSettings) -> NSPoint {
@@ -199,6 +200,12 @@ class FloatingWindowController: NSWindowController {
             log(.debug, "Captured previous active app: \(app.localizedName ?? "Unknown")")
         }
 
+        // Capture context from the focused app BEFORE activating our window
+        capturedContext = nil
+        if settings.contextCaptureEnabled && settings.autoCaptureOnActivate {
+            captureContextFromPreviousApp()
+        }
+
         // Reset window to minimal size when showing
         if let window = window {
             let minSize = NSSize(width: 200, height: 70)
@@ -292,6 +299,31 @@ class FloatingWindowController: NSWindowController {
     private func saveWindowPosition() {
         guard let window = window else { return }
         settings.saveWindowPosition(window.frame.origin)
+    }
+
+    /// Capture context from the previously focused application
+    private func captureContextFromPreviousApp() {
+        logger.info("Attempting to capture context from previous app")
+
+        guard AccessibilityTextCapture.shared.checkPermission(prompt: false) else {
+            logger.warning("Accessibility permission not granted, skipping context capture")
+            return
+        }
+
+        if let context = AccessibilityTextCapture.shared.captureFromFocusedApp() {
+            // Truncate to max length setting
+            let truncatedContext = context.truncated(to: settings.maxContextLength)
+            capturedContext = truncatedContext
+
+            logger.info("Captured \(truncatedContext.text.count) chars from \(truncatedContext.applicationName)")
+
+            // Pass the captured context to the view model
+            viewModel.setCapturedContext(truncatedContext)
+        } else {
+            logger.info("No context captured from previous app")
+            capturedContext = nil
+            viewModel.setCapturedContext(nil)
+        }
     }
 
     func performAutoPasteIfEnabled() {

@@ -19,6 +19,11 @@ actor AudioRecorder {
     private var audioLevelCallback: ((Float) -> Void)?
     private var segmentBuffer = Data()
 
+    /// Audio processing Task to prevent Task explosion
+    private var processingTask: Task<Void, Never>?
+    /// Audio buffer channel for backpressure control
+    private var audioBufferChannel: AsyncStream<AVAudioPCMBuffer>.Continuation?
+
     // Target audio format: 16kHz, 16-bit, mono PCM
     private let targetFormat = AVAudioFormat(
         commonFormat: .pcmFormatInt16,
@@ -70,10 +75,26 @@ actor AudioRecorder {
         // Install tap on input node
         let bufferSize = AVAudioFrameCount(inputFormat.sampleRate * DoubaoConstants.segmentDuration)
 
-        inputNode.installTap(onBus: 0, bufferSize: bufferSize, format: inputFormat) { [weak self] buffer, time in
-            Task {
-                await self?.processAudioBuffer(buffer)
+        // Create AsyncStream with backpressure control to prevent Task explosion
+        // bufferingNewest(5) keeps only the latest 5 buffers, preventing memory buildup
+        let (stream, continuation) = AsyncStream<AVAudioPCMBuffer>.makeStream(
+            bufferingPolicy: .bufferingNewest(5)
+        )
+        self.audioBufferChannel = continuation
+
+        // Start a single processing Task instead of creating one per callback
+        processingTask = Task { [weak self] in
+            for await buffer in stream {
+                guard let self = self else { break }
+                guard await self.isRecording else { break }
+                await self.processAudioBuffer(buffer)
             }
+        }
+
+        inputNode.installTap(onBus: 0, bufferSize: bufferSize, format: inputFormat) { [weak self] buffer, _ in
+            // Use yield instead of creating a new Task - this is non-blocking
+            // If buffer is full, bufferingNewest policy will drop oldest data
+            self?.audioBufferChannel?.yield(buffer)
         }
 
         // Prepare and start engine
@@ -87,13 +108,19 @@ actor AudioRecorder {
     /// Stop recording audio
     func stopRecording() {
         guard isRecording else {
-            log(.debug, "Audio recorder already stopped")
+            log(.info, "Audio recorder already stopped")
             return
         }
 
         log(.info, "Stopping audio recording...")
 
         isRecording = false
+
+        // Stop the audio buffer channel and processing task
+        audioBufferChannel?.finish()
+        audioBufferChannel = nil
+        processingTask?.cancel()
+        processingTask = nil
 
         // Stop engine and remove tap
         audioEngine?.inputNode.removeTap(onBus: 0)
@@ -103,7 +130,7 @@ actor AudioRecorder {
 
         // Send any remaining buffered data
         if !segmentBuffer.isEmpty {
-            log(.debug, "Flushing final buffer: \(segmentBuffer.count) bytes")
+            log(.info, "Flushing final buffer: \(segmentBuffer.count) bytes")
             audioCallback?(segmentBuffer)
             segmentBuffer.removeAll()
         }

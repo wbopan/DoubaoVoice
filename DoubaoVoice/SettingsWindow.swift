@@ -48,6 +48,7 @@ struct SettingsView: View {
 
     @State private var tempAppKey = ""
     @State private var tempAccessKey = ""
+    @State private var tempContext = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -56,6 +57,11 @@ struct SettingsView: View {
                 APISettingsTab(appKey: $tempAppKey, accessKey: $tempAccessKey)
                     .tabItem {
                         Label("API", systemImage: "key.fill")
+                    }
+
+                DictationSettingsTab(context: $tempContext)
+                    .tabItem {
+                        Label("Dictation", systemImage: "text.bubble")
                     }
 
                 ControlsSettingsTab(settings: settings)
@@ -93,6 +99,7 @@ struct SettingsView: View {
             // Load current settings
             tempAppKey = settings.appKey
             tempAccessKey = settings.accessKey
+            tempContext = settings.context
         }
     }
 
@@ -100,6 +107,7 @@ struct SettingsView: View {
         // Save settings
         settings.appKey = tempAppKey
         settings.accessKey = tempAccessKey
+        settings.context = tempContext
 
         // Update view model config
         viewModel.updateConfig(settings: settings)
@@ -166,6 +174,119 @@ struct APISettingsTab: View {
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
+    }
+}
+
+// MARK: - Dictation Settings Tab
+
+struct DictationSettingsTab: View {
+    @Binding var context: String
+    @ObservedObject private var settings = AppSettings.shared
+
+    var body: some View {
+        Form {
+            Section {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Provide context to improve recognition accuracy. Describe the topic or include key terms.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
+                    TextEditor(text: $context)
+                        .font(.system(.body))
+                        .frame(height: 100)
+                        .scrollContentBackground(.hidden)
+                        .background(Color(NSColor.textBackgroundColor).opacity(0.5))
+                        .cornerRadius(6)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
+                        )
+                }
+            } header: {
+                Text("Context")
+                    .font(.headline)
+            }
+
+            ContextCaptureSection(settings: settings)
+        }
+        .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+    }
+}
+
+// MARK: - Context Capture Section
+
+struct ContextCaptureSection: View {
+    @ObservedObject var settings: AppSettings
+    @State private var hasAccessibilityPermission = false
+
+    var body: some View {
+        Section {
+            Toggle("Enable context capture", isOn: $settings.contextCaptureEnabled.animation())
+                .onChange(of: settings.contextCaptureEnabled) { _, newValue in
+                    if newValue {
+                        _ = AccessibilityTextCapture.shared.checkPermission(prompt: true)
+                        updateAccessibilityStatus()
+                    }
+                }
+
+            if settings.contextCaptureEnabled {
+                // Accessibility permission status
+                HStack {
+                    Image(systemName: hasAccessibilityPermission ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                        .foregroundColor(hasAccessibilityPermission ? .green : .orange)
+
+                    Text(hasAccessibilityPermission ? "Accessibility permission granted" : "Accessibility permission required")
+                        .font(.caption)
+
+                    Spacer()
+
+                    if !hasAccessibilityPermission {
+                        Button("Open Settings") {
+                            openAccessibilitySettings()
+                        }
+                        .font(.caption)
+                    }
+                }
+
+                Toggle("Auto-capture on window open", isOn: $settings.autoCaptureOnActivate)
+
+                HStack {
+                    Text("Max context length:")
+
+                    Spacer()
+
+                    Picker("", selection: $settings.maxContextLength) {
+                        Text("500").tag(500)
+                        Text("1000").tag(1000)
+                        Text("2000").tag(2000)
+                        Text("5000").tag(5000)
+                    }
+                    .labelsHidden()
+                    .frame(width: 100)
+                }
+            }
+        } header: {
+            Text("Auto Context Capture")
+                .font(.headline)
+        } footer: {
+            Text("Automatically capture text from the previous application (editors, terminals, etc.) to provide context for better transcription accuracy. Requires Accessibility permission.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+        .onAppear {
+            updateAccessibilityStatus()
+        }
+    }
+
+    private func updateAccessibilityStatus() {
+        hasAccessibilityPermission = AccessibilityTextCapture.shared.checkPermission(prompt: false)
+    }
+
+    private func openAccessibilitySettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+            NSWorkspace.shared.open(url)
+        }
     }
 }
 

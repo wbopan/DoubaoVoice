@@ -46,6 +46,7 @@ class TranscriptionViewModel: ObservableObject {
     private let asrClient = DoubaoASRClient()
     private var recordingStartTime: Date?
     private var currentConfig: ASRConfig?
+    private var capturedContext: CapturedTextContext?
 
     /// Computed property for backward compatibility
     var isRecording: Bool {
@@ -73,18 +74,48 @@ class TranscriptionViewModel: ObservableObject {
 
     /// Update ASR configuration from settings
     func updateConfig(settings: AppSettings) {
+        // Parse context lines (one per line, filter empty lines)
+        var contextLines = settings.context
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+
+        // Add captured context if available
+        if let captured = capturedContext, captured.hasContent {
+            // Add captured text as additional context
+            contextLines.append(captured.text)
+            log(.info, "Including captured context from \(captured.applicationName): \(captured.text.prefix(100))...")
+        }
+
+        log(.info, "Updating ASR config with context: \(contextLines.isEmpty ? "(none)" : "(\(contextLines.count) items)")")
+
         currentConfig = ASRConfig(
             appKey: settings.appKey,
             accessKey: settings.accessKey,
             resourceID: settings.resourceID,
             enableVAD: settings.enableVAD,
-            language: "zh-CN"
+            language: "zh-CN",
+            contextLines: contextLines
         )
+    }
+
+    /// Set captured context from another application
+    func setCapturedContext(_ context: CapturedTextContext?) {
+        capturedContext = context
+        if let context = context {
+            log(.info, "Set captured context: \(context.text.count) chars from \(context.applicationName)")
+            // Update the context setting to show the captured context
+            AppSettings.shared.context = context.text
+        } else {
+            log(.debug, "Cleared captured context")
+        }
+        // Update config to include the new context
+        updateConfig(settings: AppSettings.shared)
     }
 
     /// Start recording and transcription
     func startRecording() {
-        log(.debug, "startRecording() called, current state: \(recordingState)")
+        log(.info, "startRecording() called, current state: \(recordingState)")
 
         // If currently stopping, wait for it to complete before starting
         if recordingState == .stopping {
@@ -109,7 +140,7 @@ class TranscriptionViewModel: ObservableObject {
             do {
                 // Wait for any in-progress stop operation to complete
                 if let pendingStop = stopTask {
-                    log(.debug, "Waiting for previous stop operation to complete...")
+                    log(.info, "Waiting for previous stop operation to complete...")
                     await pendingStop.value
                     stopTask = nil  // Clear the completed stop task
                     log(.debug, "Previous stop operation completed")
@@ -200,11 +231,11 @@ class TranscriptionViewModel: ObservableObject {
 
     /// Stop recording and wait for final transcription
     func stopRecording() {
-        log(.debug, "stopRecording() called, current state: \(recordingState)")
+        log(.info, "stopRecording() called, current state: \(recordingState)")
 
         // Prevent re-entry
         guard recordingState != .stopping && recordingState != .idle else {
-            log(.debug, "stopRecording() called but already stopping or idle, ignoring")
+            log(.info, "stopRecording() called but already stopping or idle, ignoring")
             return
         }
 

@@ -259,11 +259,12 @@ actor DoubaoASRClient {
 
     /// Disconnect from WebSocket
     func disconnect() async {
-        guard isConnected else { return }
+        log(.info, "Disconnecting from Doubao ASR (isConnected=\(isConnected))...")
 
-        log(.info, "Disconnecting from Doubao ASR...")
-
+        // Always execute cleanup, even if isConnected is already false
+        // This ensures resources are released in all cases
         isConnected = false
+        receivedFinalResult = false
         resultContinuation?.finish()
         resultContinuation = nil
 
@@ -395,12 +396,15 @@ actor DoubaoASRClient {
                 // Check if still connected (error might be from disconnect)
                 if isConnected {
                     log(.error, "WebSocket receive error: \(error)")
+                    // Reset connection state to allow reconnection
+                    isConnected = false
+                    resultContinuation?.finish()
                 }
                 break
             }
         }
 
-        log(.debug, "Stopped receiving messages")
+        log(.info, "Stopped receiving messages, isConnected=\(isConnected)")
     }
 
     private func handleReceivedData(_ data: Data) async {
