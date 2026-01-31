@@ -320,9 +320,8 @@ class FloatingWindowController: NSWindowController {
             // Pass the captured context to the view model
             viewModel.setCapturedContext(truncatedContext)
         } else {
-            logger.info("No context captured from previous app")
-            capturedContext = nil
-            viewModel.setCapturedContext(nil)
+            // Don't clear existing context if capture fails
+            logger.info("No context captured from previous app, keeping existing context")
         }
     }
 

@@ -249,8 +249,6 @@ struct ContextCaptureSection: View {
                     }
                 }
 
-                Toggle("Auto-capture on window open", isOn: $settings.autoCaptureOnActivate)
-
                 HStack {
                     Text("Max context length:")
 
@@ -341,17 +339,6 @@ struct ControlsSettingsTab: View {
             }
 
             DoubleTapHoldModifierSection(settings: settings)
-
-            Section {
-                Toggle("Enable Voice Activity Detection", isOn: $settings.enableVAD)
-            } header: {
-                Text("Recording")
-                    .font(.headline)
-            } footer: {
-                Text("VAD automatically detects when you start and stop speaking")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
 
             Section {
                 Toggle("Auto-paste after finish", isOn: $settings.autoPasteAfterClose)
@@ -455,8 +442,6 @@ struct DoubleTapHoldModifierSection: View {
                         .frame(width: 40)
                         .monospacedDigit()
                 }
-
-                Toggle("Auto-submit on release", isOn: configBinding(\.autoSubmitOnRelease))
             }
         } header: {
             Text("Double-Tap-and-Hold")

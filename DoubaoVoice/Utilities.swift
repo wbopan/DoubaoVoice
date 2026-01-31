@@ -849,8 +849,8 @@ class AppSettings: ObservableObject {
             // Remove old key after migration
             defaults.removeObject(forKey: UserDefaultsKeys.rememberWindowPosition)
         } else {
-            // Default to rememberLast for new installations
-            self.windowPositionMode = .rememberLast
+            // Default to nearMouse for new installations
+            self.windowPositionMode = .nearMouse
         }
 
         self.autoPasteAfterClose = defaults.object(forKey: UserDefaultsKeys.autoPasteAfterClose) as? Bool ?? true
