@@ -166,12 +166,6 @@ enum BinaryProtocol {
             return nil
         }
 
-        // Debug: Log full JSON response
-        if let jsonData = try? JSONSerialization.data(withJSONObject: json, options: .prettyPrinted),
-           let jsonString = String(data: jsonData, encoding: .utf8) {
-            log(.debug, "Server response JSON:\n\(jsonString)")
-        }
-
         // Extract fields from JSON
         if let jsonCode = json["code"] as? Int {
             code = jsonCode
