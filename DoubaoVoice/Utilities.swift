@@ -71,7 +71,7 @@ struct ASRConfig: Sendable {
             "enable_ddc": true,
             "show_utterances": true,
             "enable_nonstream": true,
-            "end_window_size": 1000
+            "end_window_size": 3000  // Trigger second pass after 3s silence
         ]
 
         // Add dialog context under corpus.context (per API documentation)

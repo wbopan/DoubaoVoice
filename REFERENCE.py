@@ -397,7 +397,7 @@ class RequestBuilder:
                 "enable_ddc": True,
                 "show_utterances": True,
                 "enable_nonstream": True,  # Two-pass recognition: realtime + final high-accuracy
-                "end_window_size": 1000    # Trigger second pass after 1s silence
+                "end_window_size": 3000    # Trigger second pass after 3s silence
             }
         }
 
