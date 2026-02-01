@@ -200,11 +200,10 @@ class FloatingWindowController: NSWindowController {
             log(.debug, "Captured previous active app: \(app.localizedName ?? "Unknown")")
         }
 
-        // Capture context from the focused app BEFORE activating our window
+        // [Sync] Capture raw context BEFORE activating our window
+        // This must be synchronous because focus changes after window activation
         capturedContext = nil
-        if settings.contextCaptureEnabled && settings.autoCaptureOnActivate {
-            captureContextFromPreviousApp()
-        }
+        let rawContext = performSynchronousCapture()
 
         // Reset window to minimal size when showing
         if let window = window {
@@ -262,19 +261,51 @@ class FloatingWindowController: NSWindowController {
 
         log(.info, "Window shown - frame: \(window.frame), isVisible: \(window.isVisible), isKeyWindow: \(window.isKeyWindow)")
 
-        // Auto-start recording when window appears
+        // [Async Serial] Process context -> Set context -> Start recording
+        // This ensures recording starts AFTER context is ready
         Task { @MainActor in
-            log(.debug, "Starting recording task")
+            logger.info("🚀 Task started - about to process context")
+
+            // Step 1: Process and set context (or clear if not captured)
+            if let raw = rawContext {
+                logger.info("🚀 Processing context from \(raw.applicationName): \(raw.text.count) chars")
+                let processed = await ContextProcessor.shared.process(
+                    text: raw.text,
+                    maxLength: settings.maxContextLength
+                )
+
+                let processedContext = CapturedTextContext(
+                    text: processed.text,
+                    documentPath: raw.documentPath,
+                    applicationName: raw.applicationName,
+                    bundleIdentifier: raw.bundleIdentifier,
+                    capturedAt: raw.capturedAt
+                )
+
+                capturedContext = processedContext
+                logger.info("🚀 About to call setCapturedContext")
+                viewModel.setCapturedContext(processedContext)
+                logger.info("🚀 Context set, processed: \(processed.originalLength) -> \(processed.text.count) chars")
+            } else {
+                // Clear previous context to avoid using stale data
+                logger.info("🚀 No rawContext, clearing previous context")
+                capturedContext = nil
+                viewModel.setCapturedContext(nil)
+            }
+
+            // Step 2: Start recording (context is now ready/cleared)
+            logger.info("🚀 About to call startRecording")
             if !viewModel.isRecording {
                 viewModel.startRecording()
                 NotificationCenter.default.post(name: .recordingStateChanged, object: nil)
             }
+            logger.info("🚀 Task completed")
         }
 
         // Notify SwiftUI view to adjust window size (fixes size issue after empty-text close)
         NotificationCenter.default.post(name: .floatingWindowDidShow, object: nil)
 
-        log(.info, "Floating window shown, recording started")
+        log(.info, "Floating window shown")
     }
 
     func hideWindow() {
@@ -301,42 +332,35 @@ class FloatingWindowController: NSWindowController {
         settings.saveWindowPosition(window.frame.origin)
     }
 
-    /// Capture context from the previously focused application
-    private func captureContextFromPreviousApp() {
-        logger.info("Attempting to capture context from previous app")
+    /// Synchronously capture raw context from the previously focused application
+    /// Returns the raw context without processing (processing is done in showWindow's Task)
+    private func performSynchronousCapture() -> CapturedTextContext? {
+        guard settings.contextCaptureEnabled && settings.autoCaptureOnActivate else {
+            logger.debug("📋 Context capture disabled, skipping")
+            return nil
+        }
+
+        // Log the current frontmost app at the moment of capture
+        let currentFrontmost = NSWorkspace.shared.frontmostApplication
+        logger.info("📋 performSynchronousCapture - current frontmost: \(currentFrontmost?.localizedName ?? "nil")")
 
         guard AccessibilityTextCapture.shared.checkPermission(prompt: false) else {
             logger.warning("Accessibility permission not granted, skipping context capture")
-            return
+            return nil
         }
 
         if let context = AccessibilityTextCapture.shared.captureFromFocusedApp() {
-            // Process context using ContextProcessor for keyword extraction
-            Task {
-                let processed = await ContextProcessor.shared.process(
-                    text: context.text,
-                    maxLength: settings.maxContextLength
-                )
-
-                let processedContext = CapturedTextContext(
-                    text: processed.text,
-                    documentPath: context.documentPath,
-                    applicationName: context.applicationName,
-                    bundleIdentifier: context.bundleIdentifier,
-                    capturedAt: context.capturedAt
-                )
-
-                await MainActor.run {
-                    capturedContext = processedContext
-                    viewModel.setCapturedContext(processedContext)
-                }
-
-                logger.info("Processed context: \(processed.originalLength) -> \(processed.text.count) chars from \(context.applicationName)")
+            if let path = context.documentPath {
+                let filename = (path as NSString).lastPathComponent
+                logger.info("Captured \(context.text.count) chars from \(context.applicationName) [\(filename)]")
+            } else {
+                logger.info("Captured \(context.text.count) chars from \(context.applicationName)")
             }
-        } else {
-            // Don't clear existing context if capture fails
-            logger.info("No context captured from previous app, keeping existing context")
+            return context
         }
+
+        logger.info("No context captured from previous app")
+        return nil
     }
 
     func performAutoPasteIfEnabled() {
