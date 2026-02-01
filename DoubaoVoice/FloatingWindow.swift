@@ -264,11 +264,11 @@ class FloatingWindowController: NSWindowController {
         // [Async Serial] Process context -> Set context -> Start recording
         // This ensures recording starts AFTER context is ready
         Task { @MainActor in
-            logger.info("🚀 Task started - about to process context")
+            logger.debug("Task started - about to process context")
 
             // Step 1: Process and set context (or clear if not captured)
             if let raw = rawContext {
-                logger.info("🚀 Processing context from \(raw.applicationName): \(raw.text.count) chars")
+                logger.debug("Processing context from \(raw.applicationName): \(raw.text.count) chars")
                 let processed = await ContextProcessor.shared.process(
                     text: raw.text,
                     maxLength: settings.maxContextLength
@@ -283,23 +283,23 @@ class FloatingWindowController: NSWindowController {
                 )
 
                 capturedContext = processedContext
-                logger.info("🚀 About to call setCapturedContext")
+                logger.debug("About to call setCapturedContext")
                 viewModel.setCapturedContext(processedContext)
-                logger.info("🚀 Context set, processed: \(processed.originalLength) -> \(processed.text.count) chars")
+                logger.info("Context set, processed: \(processed.originalLength) -> \(processed.text.count) chars")
             } else {
                 // Clear previous context to avoid using stale data
-                logger.info("🚀 No rawContext, clearing previous context")
+                logger.debug("No rawContext, clearing previous context")
                 capturedContext = nil
                 viewModel.setCapturedContext(nil)
             }
 
             // Step 2: Start recording (context is now ready/cleared)
-            logger.info("🚀 About to call startRecording")
+            logger.debug("About to call startRecording")
             if !viewModel.isRecording {
                 viewModel.startRecording()
                 NotificationCenter.default.post(name: .recordingStateChanged, object: nil)
             }
-            logger.info("🚀 Task completed")
+            logger.debug("Task completed")
         }
 
         // Notify SwiftUI view to adjust window size (fixes size issue after empty-text close)
@@ -336,13 +336,13 @@ class FloatingWindowController: NSWindowController {
     /// Returns the raw context without processing (processing is done in showWindow's Task)
     private func performSynchronousCapture() -> CapturedTextContext? {
         guard settings.contextCaptureEnabled && settings.autoCaptureOnActivate else {
-            logger.debug("📋 Context capture disabled, skipping")
+            logger.debug("Context capture disabled, skipping")
             return nil
         }
 
         // Log the current frontmost app at the moment of capture
         let currentFrontmost = NSWorkspace.shared.frontmostApplication
-        logger.info("📋 performSynchronousCapture - current frontmost: \(currentFrontmost?.localizedName ?? "nil")")
+        logger.debug("performSynchronousCapture - current frontmost: \(currentFrontmost?.localizedName ?? "nil")")
 
         guard AccessibilityTextCapture.shared.checkPermission(prompt: false) else {
             logger.warning("Accessibility permission not granted, skipping context capture")

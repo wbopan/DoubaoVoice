@@ -97,7 +97,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             keyCode: settings.globalHotkey.keyCode,
             modifiers: settings.globalHotkey.modifiers
         ) { [weak self] in
+            // Log the focused app at the moment of hotkey press (before Task scheduling)
+            let appBeforeTask = NSWorkspace.shared.frontmostApplication
+            log(.debug, "Hotkey pressed - frontmost app BEFORE Task: \(appBeforeTask?.localizedName ?? "nil")")
+
             Task { @MainActor in
+                // Log again after Task starts executing (focus may have changed)
+                let appInTask = NSWorkspace.shared.frontmostApplication
+                log(.debug, "Task executing - frontmost app IN Task: \(appInTask?.localizedName ?? "nil")")
+
                 self?.toggleWindow()
             }
         }

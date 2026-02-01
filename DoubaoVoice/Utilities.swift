@@ -86,13 +86,13 @@ struct ASRConfig: Sendable {
                let contextString = String(data: contextData, encoding: .utf8) {
                 request["corpus"] = ["context": contextString]
                 #if DEBUG
-                print("[ℹ️] ASR - Including dialog context: \(contextText)")
-                print("[🔍] ASR - Dialog corpus.context: \(contextString)")
+                print("\u{001B}[32m[INFO]\u{001B}[0m ASR - Including dialog context: \(contextText)")
+                print("\u{001B}[36m[DEBUG]\u{001B}[0m ASR - Dialog corpus.context: \(contextString)")
                 #endif
             }
         } else {
             #if DEBUG
-            print("[🔍] ASR - No dialog context configured")
+            print("\u{001B}[36m[DEBUG]\u{001B}[0m ASR - No dialog context configured")
             #endif
         }
 
@@ -437,10 +437,10 @@ enum LogLevel {
 
     nonisolated var prefix: String {
         switch self {
-        case .debug: return "🔍"
-        case .info: return "ℹ️"
-        case .warning: return "⚠️"
-        case .error: return "❌"
+        case .debug:   return "\u{001B}[36m[DEBUG]\u{001B}[0m"   // Cyan
+        case .info:    return "\u{001B}[32m[INFO]\u{001B}[0m"    // Green
+        case .warning: return "\u{001B}[33m[WARN]\u{001B}[0m"    // Yellow
+        case .error:   return "\u{001B}[31m[ERROR]\u{001B}[0m"   // Red
         }
     }
 }
@@ -513,7 +513,7 @@ nonisolated func log(_ level: LogLevel, _ message: String, file: String = #file,
 
     // Also print to console for development convenience
     #if DEBUG
-    print("[\(level.prefix)] \(formattedMessage)")
+    print("\(level.prefix) \(formattedMessage)")
     #endif
 }
 

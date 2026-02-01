@@ -74,20 +74,19 @@ class TranscriptionViewModel: ObservableObject {
 
     /// Update ASR configuration from settings
     func updateConfig(settings: AppSettings) {
-        // Parse context lines (one per line, filter empty lines)
-        var contextLines = settings.context
-            .components(separatedBy: .newlines)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
+        var contextLines: [String] = []
 
-        // Add captured context if available
+        // Use captured context if available, otherwise use empty context
+        // Static settings.context is not used when context capture is enabled
         if let captured = capturedContext, captured.hasContent {
-            // Add captured text as additional context
-            contextLines.append(captured.text)
-            log(.info, "Including captured context from \(captured.applicationName): \(captured.text.prefix(100))...")
+            contextLines = [captured.text]
+            log(.debug, "updateConfig: Using captured context from \(captured.applicationName): \(captured.text.prefix(50))...")
+        } else {
+            // No captured context - use empty context (not static config)
+            log(.debug, "updateConfig: No captured context, using empty context")
         }
 
-        log(.info, "Updating ASR config with context: \(contextLines.isEmpty ? "(none)" : "(\(contextLines.count) items)")")
+        log(.debug, "updateConfig: Final context has \(contextLines.count) items")
 
         currentConfig = ASRConfig(
             appKey: settings.appKey,
@@ -100,22 +99,31 @@ class TranscriptionViewModel: ObservableObject {
     }
 
     /// Set captured context from another application
+    /// Note: This only sets the in-memory capturedContext, not AppSettings.context
+    /// AppSettings.context is for user-configured static context (e.g., industry terms)
     func setCapturedContext(_ context: CapturedTextContext?) {
         capturedContext = context
         if let context = context {
-            log(.info, "Set captured context: \(context.text.count) chars from \(context.applicationName)")
-            // Update the context setting to show the captured context
-            AppSettings.shared.context = context.text
+            log(.info, "setCapturedContext: \(context.text.count) chars from \(context.applicationName)")
+            log(.debug, "Context preview: \(context.text.prefix(100))...")
         } else {
-            log(.debug, "Cleared captured context")
+            log(.debug, "setCapturedContext: Clearing context (nil)")
         }
-        // Update config to include the new context
+        // Update config to include the new context (or exclude if nil)
         updateConfig(settings: AppSettings.shared)
     }
 
     /// Start recording and transcription
     func startRecording() {
         log(.info, "startRecording() called, current state: \(recordingState)")
+
+        // Log the current config's context for debugging
+        if let config = currentConfig {
+            let contextPreview = config.contextLines.first?.prefix(50) ?? "(empty)"
+            log(.debug, "Current config context: \(config.contextLines.count) lines, first: \(contextPreview)...")
+        } else {
+            log(.warning, "currentConfig is nil!")
+        }
 
         // If currently stopping, wait for it to complete before starting
         if recordingState == .stopping {
@@ -140,7 +148,7 @@ class TranscriptionViewModel: ObservableObject {
             do {
                 // Wait for any in-progress stop operation to complete
                 if let pendingStop = stopTask {
-                    log(.info, "Waiting for previous stop operation to complete...")
+                    log(.debug, "Waiting for previous stop operation to complete...")
                     await pendingStop.value
                     stopTask = nil  // Clear the completed stop task
                     log(.debug, "Previous stop operation completed")
@@ -312,7 +320,7 @@ class TranscriptionViewModel: ObservableObject {
 
         // Wait for stop task to complete (includes waiting for final result and second-pass)
         if let pendingStop = stopTask {
-            log(.debug, "Waiting for stop task to complete...")
+            log(.debug, "Waiting for stop task...")
             await pendingStop.value
             log(.debug, "Stop task completed")
         }
@@ -400,18 +408,18 @@ class TranscriptionViewModel: ObservableObject {
                 var processedText = result.text
                 if AppSettings.shared.removeTrailingPunctuation {
                     processedText = processedText.removingTrailingPunctuation()
-                    log(.debug, "Applied punctuation removal: '\(result.text)' -> '\(processedText)'")
+                    log(.debug, "Punctuation removed: '\(result.text)' -> '\(processedText)'")
                 }
 
                 // For both interim and final results, replace with the latest processed text
                 transcribedText = processedText
 
-                log(.debug, "Updated text: [\(processedText)] final:\(result.isLastPackage)")
+                log(.debug, "Text updated: [\(processedText)] final:\(result.isLastPackage)")
             }
 
             // Update status for final result
             if result.isLastPackage {
-                log(.info, "Received final transcription result")
+                log(.info, "Final transcription result received")
             }
         }
     }
