@@ -205,6 +205,15 @@ actor DoubaoASRClient {
 
     /// Connect to Doubao ASR WebSocket
     func connect(config: ASRConfig) async throws {
+        // If a previous session exists, clean it up first to ensure proper state reset
+        if session != nil {
+            log(.info, "Previous session exists, cleaning up before reconnect...")
+            await disconnect()
+        }
+
+        // Explicitly reset sequence number to ensure new session starts from 1
+        sequence = 1
+
         guard !isConnected else {
             log(.warning, "Already connected")
             return

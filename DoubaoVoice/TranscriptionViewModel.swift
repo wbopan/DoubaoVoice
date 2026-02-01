@@ -399,7 +399,13 @@ class TranscriptionViewModel: ObservableObject {
             if !result.isSuccess {
                 errorMessage = "ASR error (\(result.code)): \(result.message)"
                 log(.error, "ASR error - code:\(result.code) message:\(result.message)")
-                continue
+
+                // Stop recording on fatal errors to prevent AudioRecorder from spinning
+                if recordingState == .recording {
+                    log(.warning, "Stopping recording due to ASR error")
+                    stopRecording()
+                }
+                return  // Exit the loop - connection is broken
             }
 
             // Update transcribed text
@@ -421,6 +427,13 @@ class TranscriptionViewModel: ObservableObject {
             if result.isLastPackage {
                 log(.info, "Final transcription result received")
             }
+        }
+
+        // Stream ended - check if this was unexpected (connection dropped)
+        if recordingState == .recording {
+            log(.warning, "ASR stream ended unexpectedly while recording")
+            statusMessage = "Connection dropped"
+            stopRecording()
         }
     }
 }
