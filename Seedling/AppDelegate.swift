@@ -455,10 +455,13 @@ class ModifierKeyMonitor {
 
     /// Check if Accessibility permission is granted
     static func checkAccessibilityPermission(prompt: Bool = false) -> Bool {
-        let options: [String: Any] = prompt
-            ? [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
-            : [:]
-        return AXIsProcessTrustedWithOptions(options as CFDictionary)
+        if prompt {
+            let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
+            return AXIsProcessTrustedWithOptions(options as CFDictionary)
+        } else {
+            // Pass nil instead of empty dictionary to avoid crash
+            return AXIsProcessTrustedWithOptions(nil)
+        }
     }
 }
 
