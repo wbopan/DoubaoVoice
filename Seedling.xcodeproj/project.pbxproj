@@ -6,6 +6,11 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		A23FDF80BA844D08A20FC750 /* LaunchAtLogin in Frameworks */ = {isa = PBXBuildFile; productRef = 6D74A57A0294441FB3276435 /* LaunchAtLogin */; };
+		FBCE8D3CB7BC49598264C0F6 /* SelectedTextKit in Frameworks */ = {isa = PBXBuildFile; productRef = 709D041CC9E440B280ED8480 /* SelectedTextKit */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		5A846FF62F21B8B900CBA392 /* Seedling.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Seedling.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -23,6 +28,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A23FDF80BA844D08A20FC750 /* LaunchAtLogin in Frameworks */,
+				FBCE8D3CB7BC49598264C0F6 /* SelectedTextKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -65,6 +72,8 @@
 			);
 			name = Seedling;
 			packageProductDependencies = (
+				6D74A57A0294441FB3276435 /* LaunchAtLogin */,
+				709D041CC9E440B280ED8480 /* SelectedTextKit */,
 			);
 			productName = Seedling;
 			productReference = 5A846FF62F21B8B900CBA392 /* Seedling.app */;
@@ -96,6 +105,10 @@
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 5A846FF72F21B8B900CBA392 /* Products */;
+			packageReferences = (
+				A1457309DDD249148CD4A6D3 /* XCRemoteSwiftPackageReference "LaunchAtLogin-Modern" */,
+				10D034FB1309448D825B496E /* XCRemoteSwiftPackageReference "SelectedTextKit" */,
+			);
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -355,6 +368,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		A1457309DDD249148CD4A6D3 /* XCRemoteSwiftPackageReference "LaunchAtLogin-Modern" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sindresorhus/LaunchAtLogin-Modern";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		6D74A57A0294441FB3276435 /* LaunchAtLogin */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A1457309DDD249148CD4A6D3 /* XCRemoteSwiftPackageReference "LaunchAtLogin-Modern" */;
+			productName = LaunchAtLogin;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 5A846FEE2F21B8B900CBA392 /* Project object */;
 }

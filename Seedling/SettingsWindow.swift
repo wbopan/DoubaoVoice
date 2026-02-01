@@ -8,6 +8,7 @@
 import Cocoa
 import SwiftUI
 import Carbon
+import LaunchAtLogin
 
 // MARK: - Settings Window Controller
 
@@ -353,6 +354,13 @@ struct ControlsSettingsTab: View {
 
     var body: some View {
         Form {
+            Section {
+                LaunchAtLogin.Toggle("Launch at login")
+            } header: {
+                Text("General")
+                    .font(.headline)
+            }
+
             Section {
                 HStack {
                     Text("Hotkey:")
