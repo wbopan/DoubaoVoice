@@ -1,22 +1,13 @@
 {
-  "originHash" : "1edef938703bde9eb4e6312eda70fd4d617882d251a039dfdb817fd1f3bc10b9",
+  "originHash" : "a2cc698b3ea7d8abe2aa58cf6ee0751aed6cc374c2c788415ac55d07dcbc196b",
   "pins" : [
     {
-      "identity" : "axswift",
+      "identity" : "keyboardshortcuts",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/tisfeng/AXSwift.git",
+      "location" : "https://github.com/sindresorhus/KeyboardShortcuts",
       "state" : {
-        "revision" : "2efa201fa18184de98674165592fd1ecb0c00a6d",
-        "version" : "0.3.6"
-      }
-    },
-    {
-      "identity" : "keysender",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/jordanbaird/KeySender",
-      "state" : {
-        "revision" : "99584bf1a03ab600cc44be89a2dcd98b2dbeb9de",
-        "version" : "0.0.5"
+        "revision" : "1aef85578fdd4f9eaeeb8d53b7b4fc31bf08fe27",
+        "version" : "2.4.0"
       }
     },
     {
@@ -26,15 +17,6 @@
       "state" : {
         "revision" : "a04ec1c363be3627734f6dad757d82f5d4fa8fcc",
         "version" : "1.1.0"
-      }
-    },
-    {
-      "identity" : "selectedtextkit",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/tisfeng/SelectedTextKit",
-      "state" : {
-        "revision" : "ddf4655a66438b2e89d29d53820c582a59da450f",
-        "version" : "2.6.3"
       }
     }
   ],

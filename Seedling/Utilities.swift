@@ -11,45 +11,7 @@ import zlib
 import Combine
 import AppKit
 import OSLog
-
-// MARK: - Captured Text Context
-
-/// Holds captured text and metadata from another application
-struct CapturedTextContext: Sendable {
-    /// The captured text content
-    let text: String
-
-    /// Document path if available (e.g., from editors)
-    let documentPath: String?
-
-    /// Name of the source application
-    let applicationName: String
-
-    /// Bundle identifier of the source application
-    let bundleIdentifier: String?
-
-    /// Timestamp when the context was captured
-    let capturedAt: Date
-
-    /// Whether any text was actually captured
-    var hasContent: Bool {
-        !text.isEmpty
-    }
-
-    /// Truncate text to a maximum length
-    func truncated(to maxLength: Int) -> CapturedTextContext {
-        guard text.count > maxLength else { return self }
-
-        let truncatedText = String(text.prefix(maxLength))
-        return CapturedTextContext(
-            text: truncatedText,
-            documentPath: documentPath,
-            applicationName: applicationName,
-            bundleIdentifier: bundleIdentifier,
-            capturedAt: capturedAt
-        )
-    }
-}
+import KeyboardShortcuts
 
 // MARK: - Constants
 
@@ -932,5 +894,30 @@ class AppSettings: ObservableObject {
         guard windowPositionMode == .rememberLast else { return }
         defaults.set(position.x, forKey: UserDefaultsKeys.windowPositionX)
         defaults.set(position.y, forKey: UserDefaultsKeys.windowPositionY)
+    }
+
+    /// Migrate legacy Carbon hotkey settings to KeyboardShortcuts
+    static func migrateHotkeyIfNeeded() {
+        let defaults = UserDefaults.standard
+        let migrationKey = "Seedling.HotkeyMigrationCompleted"
+
+        guard !defaults.bool(forKey: migrationKey) else { return }
+
+        if let keyCode = defaults.object(forKey: UserDefaultsKeys.globalHotkeyKeyCode) as? UInt32,
+           let modifiers = defaults.object(forKey: UserDefaultsKeys.globalHotkeyModifiers) as? UInt32 {
+
+            let key = KeyboardShortcuts.Key(rawValue: Int(keyCode))
+
+            var mods: NSEvent.ModifierFlags = []
+            if modifiers & UInt32(cmdKey) != 0 { mods.insert(.command) }
+            if modifiers & UInt32(optionKey) != 0 { mods.insert(.option) }
+            if modifiers & UInt32(shiftKey) != 0 { mods.insert(.shift) }
+            if modifiers & UInt32(controlKey) != 0 { mods.insert(.control) }
+
+            KeyboardShortcuts.setShortcut(.init(key, modifiers: mods), for: .toggleWindow)
+            log(.info, "Migrated legacy hotkey to KeyboardShortcuts")
+        }
+
+        defaults.set(true, forKey: migrationKey)
     }
 }

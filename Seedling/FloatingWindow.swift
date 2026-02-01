@@ -344,8 +344,14 @@ class FloatingWindowController: NSWindowController {
         let currentFrontmost = NSWorkspace.shared.frontmostApplication
         logger.debug("performSynchronousCapture - current frontmost: \(currentFrontmost?.localizedName ?? "nil")")
 
-        // Use SelectedTextKit via synchronous wrapper
-        if let context = TextCaptureService.shared.captureSelectedTextSync() {
+        // Check accessibility permission
+        guard AccessibilityTextCapture.shared.checkPermission(prompt: false) else {
+            logger.warning("Accessibility permission not granted")
+            return nil
+        }
+
+        // Use AccessibilityTextCapture (with browser support)
+        if let context = AccessibilityTextCapture.shared.captureFromFocusedApp() {
             if let path = context.documentPath {
                 let filename = (path as NSString).lastPathComponent
                 logger.info("Captured \(context.text.count) chars from \(context.applicationName) [\(filename)]")

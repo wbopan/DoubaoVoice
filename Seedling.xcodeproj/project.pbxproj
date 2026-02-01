@@ -8,7 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		A23FDF80BA844D08A20FC750 /* LaunchAtLogin in Frameworks */ = {isa = PBXBuildFile; productRef = 6D74A57A0294441FB3276435 /* LaunchAtLogin */; };
-		FBCE8D3CB7BC49598264C0F6 /* SelectedTextKit in Frameworks */ = {isa = PBXBuildFile; productRef = 709D041CC9E440B280ED8480 /* SelectedTextKit */; };
+		B8E4F2A1C3D54E6789012345 /* KeyboardShortcuts in Frameworks */ = {isa = PBXBuildFile; productRef = C9F5E3B2D4A65F7890123456 /* KeyboardShortcuts */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -29,7 +29,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A23FDF80BA844D08A20FC750 /* LaunchAtLogin in Frameworks */,
-				FBCE8D3CB7BC49598264C0F6 /* SelectedTextKit in Frameworks */,
+				B8E4F2A1C3D54E6789012345 /* KeyboardShortcuts in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -73,7 +73,7 @@
 			name = Seedling;
 			packageProductDependencies = (
 				6D74A57A0294441FB3276435 /* LaunchAtLogin */,
-				709D041CC9E440B280ED8480 /* SelectedTextKit */,
+				C9F5E3B2D4A65F7890123456 /* KeyboardShortcuts */,
 			);
 			productName = Seedling;
 			productReference = 5A846FF62F21B8B900CBA392 /* Seedling.app */;
@@ -107,7 +107,7 @@
 			productRefGroup = 5A846FF72F21B8B900CBA392 /* Products */;
 			packageReferences = (
 				A1457309DDD249148CD4A6D3 /* XCRemoteSwiftPackageReference "LaunchAtLogin-Modern" */,
-				10D034FB1309448D825B496E /* XCRemoteSwiftPackageReference "SelectedTextKit" */,
+				D7A6F4C3E5B76G8901234567 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */,
 			);
 			projectDirPath = "";
 			projectRoot = "";
@@ -378,9 +378,9 @@
 				minimumVersion = 1.0.0;
 			};
 		};
-		10D034FB1309448D825B496E /* XCRemoteSwiftPackageReference "SelectedTextKit" */ = {
+		D7A6F4C3E5B76G8901234567 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/tisfeng/SelectedTextKit";
+			repositoryURL = "https://github.com/sindresorhus/KeyboardShortcuts";
 			requirement = {
 				kind = upToNextMajorVersion;
 				minimumVersion = 2.0.0;
@@ -394,10 +394,10 @@
 			package = A1457309DDD249148CD4A6D3 /* XCRemoteSwiftPackageReference "LaunchAtLogin-Modern" */;
 			productName = LaunchAtLogin;
 		};
-		709D041CC9E440B280ED8480 /* SelectedTextKit */ = {
+		C9F5E3B2D4A65F7890123456 /* KeyboardShortcuts */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 10D034FB1309448D825B496E /* XCRemoteSwiftPackageReference "SelectedTextKit" */;
-			productName = SelectedTextKit;
+			package = D7A6F4C3E5B76G8901234567 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */;
+			productName = KeyboardShortcuts;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

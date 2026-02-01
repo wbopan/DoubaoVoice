@@ -9,6 +9,7 @@ import Cocoa
 import SwiftUI
 import Carbon
 import LaunchAtLogin
+import KeyboardShortcuts
 
 // MARK: - Settings Window Controller
 
@@ -239,7 +240,7 @@ struct ContextCaptureSection: View {
             Toggle("Enable context capture", isOn: $settings.contextCaptureEnabled.animation())
                 .onChange(of: settings.contextCaptureEnabled) { _, newValue in
                     if newValue {
-                        _ = TextCaptureService.shared.checkPermission(prompt: true)
+                        _ = AccessibilityTextCapture.shared.checkPermission(prompt: true)
                         updateAccessibilityStatus()
                     }
                 }
@@ -337,7 +338,7 @@ struct ContextCaptureSection: View {
     }
 
     private func updateAccessibilityStatus() {
-        hasAccessibilityPermission = TextCaptureService.shared.checkPermission(prompt: false)
+        hasAccessibilityPermission = AccessibilityTextCapture.shared.checkPermission(prompt: false)
     }
 
     private func openAccessibilitySettings() {
@@ -364,13 +365,9 @@ struct ControlsSettingsTab: View {
             Section {
                 HStack {
                     Text("Hotkey:")
-
                     Spacer()
-
-                    HotkeyInputCapsule(
-                        hotkey: $settings.globalHotkey,
-                        requireModifiers: true
-                    )
+                    KeyboardShortcuts.Recorder("", name: .toggleWindow)
+                        .fixedSize()
                 }
             } header: {
                 Text("Global Hotkey")

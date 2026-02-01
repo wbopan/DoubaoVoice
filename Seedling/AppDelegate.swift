@@ -9,6 +9,7 @@ import Cocoa
 import SwiftUI
 import Carbon
 import OSLog
+import KeyboardShortcuts
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Properties
@@ -16,7 +17,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var floatingWindowController: FloatingWindowController?
     private var settingsWindowController: SettingsWindowController?
-    private var hotkeyManager: GlobalHotkeyManager?
     private var modifierKeyMonitor: ModifierKeyMonitor?
     private let viewModel = TranscriptionViewModel.shared
     private let settings = AppSettings.shared
@@ -56,8 +56,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        // Cleanup hotkey
-        hotkeyManager?.unregister()
         // Cleanup long-press monitor
         modifierKeyMonitor?.stop()
     }
@@ -87,41 +85,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Global Hotkey Setup
 
     private func setupHotkey() {
-        // Don't register if hotkey is unset
-        guard !settings.globalHotkey.isUnset else {
-            log(.warning, "Global hotkey is unset, skipping registration")
-            return
-        }
+        // Migrate legacy settings on first run
+        AppSettings.migrateHotkeyIfNeeded()
 
-        hotkeyManager = GlobalHotkeyManager(
-            keyCode: settings.globalHotkey.keyCode,
-            modifiers: settings.globalHotkey.modifiers
-        ) { [weak self] in
-            // Log the focused app at the moment of hotkey press (before Task scheduling)
-            let appBeforeTask = NSWorkspace.shared.frontmostApplication
-            log(.debug, "Hotkey pressed - frontmost app BEFORE Task: \(appBeforeTask?.localizedName ?? "nil")")
-
+        KeyboardShortcuts.onKeyUp(for: .toggleWindow) { [weak self] in
             Task { @MainActor in
-                // Log again after Task starts executing (focus may have changed)
-                let appInTask = NSWorkspace.shared.frontmostApplication
-                log(.debug, "Task executing - frontmost app IN Task: \(appInTask?.localizedName ?? "nil")")
-
                 self?.toggleWindow()
             }
         }
 
-        hotkeyManager?.register()
-        log(.info, "Global hotkey registered: \(settings.globalHotkey.displayString)")
+        log(.info, "Global hotkey registered via KeyboardShortcuts")
     }
 
     @objc private func handleHotkeyChanged() {
-        log(.info, "Updating global hotkey...")
-
-        hotkeyManager?.unregister()
-        hotkeyManager = nil
-
-        setupHotkey()
-        log(.info, "Global hotkey updated to: \(settings.globalHotkey.displayString)")
+        // KeyboardShortcuts handles changes automatically
+        log(.info, "Global hotkey setting changed")
     }
 
     // MARK: - Double-Tap-and-Hold Modifier Key Setup
@@ -229,118 +207,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func quit() {
         NSApp.terminate(nil)
-    }
-}
-
-// MARK: - Global Hotkey Manager
-
-class GlobalHotkeyManager {
-    private var hotKeyRef: EventHotKeyRef?
-    private let keyCode: UInt32
-    private let modifiers: UInt32
-    private let callback: () -> Void
-    private var eventHandler: EventHandlerRef?
-
-    init(keyCode: UInt32, modifiers: UInt32, callback: @escaping () -> Void) {
-        self.keyCode = keyCode
-        self.modifiers = modifiers
-        self.callback = callback
-    }
-
-    deinit {
-        unregister()
-    }
-
-    func register() {
-        guard hotKeyRef == nil else {
-            log(.warning, "Hotkey already registered")
-            return
-        }
-
-        // Convert modifiers to Carbon format
-        var carbonModifiers: UInt32 = 0
-        if modifiers & UInt32(cmdKey) != 0 {
-            carbonModifiers |= UInt32(cmdKey)
-        }
-        if modifiers & UInt32(optionKey) != 0 {
-            carbonModifiers |= UInt32(optionKey)
-        }
-        if modifiers & UInt32(shiftKey) != 0 {
-            carbonModifiers |= UInt32(shiftKey)
-        }
-        if modifiers & UInt32(controlKey) != 0 {
-            carbonModifiers |= UInt32(controlKey)
-        }
-
-        // Create hotkey ID
-        let hotKeyID = EventHotKeyID(signature: OSType("DBVC".fourCharCode), id: 1)
-
-        // Install event handler
-        var eventSpec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
-
-        let callback: EventHandlerUPP = { (nextHandler, theEvent, userData) -> OSStatus in
-            guard let userData = userData else { return OSStatus(eventNotHandledErr) }
-            let manager = Unmanaged<GlobalHotkeyManager>.fromOpaque(userData).takeUnretainedValue()
-            manager.callback()
-            return noErr
-        }
-
-        let selfPtr = Unmanaged.passUnretained(self).toOpaque()
-        let status = InstallEventHandler(
-            GetApplicationEventTarget(),
-            callback,
-            1,
-            &eventSpec,
-            selfPtr,
-            &eventHandler
-        )
-
-        guard status == noErr else {
-            log(.error, "Failed to install hotkey event handler: \(status)")
-            return
-        }
-
-        // Register hotkey
-        let registerStatus = RegisterEventHotKey(
-            keyCode,
-            carbonModifiers,
-            hotKeyID,
-            GetApplicationEventTarget(),
-            0,
-            &hotKeyRef
-        )
-
-        if registerStatus == noErr {
-            log(.info, "Hotkey registered successfully")
-        } else {
-            log(.error, "Failed to register hotkey: \(registerStatus)")
-        }
-    }
-
-    func unregister() {
-        if let hotKeyRef = hotKeyRef {
-            UnregisterEventHotKey(hotKeyRef)
-            self.hotKeyRef = nil
-            log(.info, "Hotkey unregistered")
-        }
-
-        if let eventHandler = eventHandler {
-            RemoveEventHandler(eventHandler)
-            self.eventHandler = nil
-        }
-    }
-}
-
-// MARK: - String Extension for FourCC
-
-extension String {
-    var fourCharCode: FourCharCode {
-        assert(self.count == 4, "String must be exactly 4 characters")
-        var result: FourCharCode = 0
-        for char in self.utf8 {
-            result = (result << 8) + FourCharCode(char)
-        }
-        return result
     }
 }
 
