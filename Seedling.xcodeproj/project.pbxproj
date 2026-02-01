@@ -378,6 +378,14 @@
 				minimumVersion = 1.0.0;
 			};
 		};
+		10D034FB1309448D825B496E /* XCRemoteSwiftPackageReference "SelectedTextKit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/tisfeng/SelectedTextKit";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.0.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -385,6 +393,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = A1457309DDD249148CD4A6D3 /* XCRemoteSwiftPackageReference "LaunchAtLogin-Modern" */;
 			productName = LaunchAtLogin;
+		};
+		709D041CC9E440B280ED8480 /* SelectedTextKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 10D034FB1309448D825B496E /* XCRemoteSwiftPackageReference "SelectedTextKit" */;
+			productName = SelectedTextKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

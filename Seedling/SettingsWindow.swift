@@ -239,7 +239,7 @@ struct ContextCaptureSection: View {
             Toggle("Enable context capture", isOn: $settings.contextCaptureEnabled.animation())
                 .onChange(of: settings.contextCaptureEnabled) { _, newValue in
                     if newValue {
-                        _ = AccessibilityTextCapture.shared.checkPermission(prompt: true)
+                        _ = TextCaptureService.shared.checkPermission(prompt: true)
                         updateAccessibilityStatus()
                     }
                 }
@@ -337,7 +337,7 @@ struct ContextCaptureSection: View {
     }
 
     private func updateAccessibilityStatus() {
-        hasAccessibilityPermission = AccessibilityTextCapture.shared.checkPermission(prompt: false)
+        hasAccessibilityPermission = TextCaptureService.shared.checkPermission(prompt: false)
     }
 
     private func openAccessibilitySettings() {

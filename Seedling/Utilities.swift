@@ -12,6 +12,45 @@ import Combine
 import AppKit
 import OSLog
 
+// MARK: - Captured Text Context
+
+/// Holds captured text and metadata from another application
+struct CapturedTextContext: Sendable {
+    /// The captured text content
+    let text: String
+
+    /// Document path if available (e.g., from editors)
+    let documentPath: String?
+
+    /// Name of the source application
+    let applicationName: String
+
+    /// Bundle identifier of the source application
+    let bundleIdentifier: String?
+
+    /// Timestamp when the context was captured
+    let capturedAt: Date
+
+    /// Whether any text was actually captured
+    var hasContent: Bool {
+        !text.isEmpty
+    }
+
+    /// Truncate text to a maximum length
+    func truncated(to maxLength: Int) -> CapturedTextContext {
+        guard text.count > maxLength else { return self }
+
+        let truncatedText = String(text.prefix(maxLength))
+        return CapturedTextContext(
+            text: truncatedText,
+            documentPath: documentPath,
+            applicationName: applicationName,
+            bundleIdentifier: bundleIdentifier,
+            capturedAt: capturedAt
+        )
+    }
+}
+
 // MARK: - Constants
 
 enum ASRConstants: Sendable {
