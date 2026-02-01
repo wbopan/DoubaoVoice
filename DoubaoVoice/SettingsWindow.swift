@@ -191,7 +191,7 @@ struct DictationSettingsTab: View {
         Form {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Provide context to improve recognition accuracy. Describe the topic or include key terms.")
+                    Text("Provide persistent context that always applies. This has priority over auto-captured content.")
                         .font(.caption)
                         .foregroundColor(.secondary)
 
@@ -205,9 +205,17 @@ struct DictationSettingsTab: View {
                             RoundedRectangle(cornerRadius: 6)
                                 .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
                         )
+
+                    // Character count
+                    HStack {
+                        Spacer()
+                        Text("\(context.count) / \(settings.maxContextLength)")
+                            .font(.caption2)
+                            .foregroundColor(context.count > settings.maxContextLength ? .red : .secondary)
+                    }
                 }
             } header: {
-                Text("Context")
+                Text("User Context")
                     .font(.headline)
             }
 
@@ -222,6 +230,7 @@ struct DictationSettingsTab: View {
 
 struct ContextCaptureSection: View {
     @ObservedObject var settings: AppSettings
+    @ObservedObject private var viewModel = TranscriptionViewModel.shared
     @State private var hasAccessibilityPermission = false
 
     var body: some View {
@@ -267,12 +276,57 @@ struct ContextCaptureSection: View {
                     .labelsHidden()
                     .frame(width: 100)
                 }
+
+                // Read-only auto-captured context display
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("Auto-captured Context")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                        if !viewModel.capturedContextSource.isEmpty {
+                            Text("from \(viewModel.capturedContextSource)")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                        Text("\(viewModel.capturedContextText.count) chars")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+
+                    if viewModel.capturedContextText.isEmpty {
+                        Text("No context captured yet. Use the hotkey to activate and capture context from another app.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .italic()
+                            .padding(8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color(NSColor.textBackgroundColor).opacity(0.3))
+                            .cornerRadius(6)
+                    } else {
+                        // Read-only text display
+                        ScrollView {
+                            Text(viewModel.capturedContextText)
+                                .font(.system(.caption, design: .monospaced))
+                                .foregroundColor(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .frame(height: 120)
+                        .padding(8)
+                        .background(Color(NSColor.textBackgroundColor).opacity(0.3))
+                        .cornerRadius(6)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+                        )
+                    }
+                }
             }
         } header: {
             Text("Auto Context Capture")
                 .font(.headline)
         } footer: {
-            Text("Automatically capture text from the previous application (editors, terminals, etc.) to provide context for better transcription accuracy. Requires Accessibility permission.")
+            Text("When enabled, text from the previous application is captured on each hotkey activation and appended after your user context (up to the max length limit).")
                 .font(.caption)
                 .foregroundColor(.secondary)
         }

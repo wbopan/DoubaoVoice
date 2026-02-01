@@ -24,6 +24,8 @@ class TranscriptionViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var statusMessage = "Ready"
     @Published var audioLevel: Float = 0.0
+    @Published var capturedContextText: String = ""  // For UI display (read-only)
+    @Published var capturedContextSource: String = ""  // App name for display
 
     private let levelSmoothingFactor: Float = 0.3
 
@@ -74,19 +76,52 @@ class TranscriptionViewModel: ObservableObject {
 
     /// Update ASR configuration from settings
     func updateConfig(settings: AppSettings) {
-        var contextLines: [String] = []
+        var mergedContext = ""
 
-        // Use captured context if available, otherwise use empty context
-        // Static settings.context is not used when context capture is enabled
-        if let captured = capturedContext, captured.hasContent {
-            contextLines = [captured.text]
-            log(.debug, "updateConfig: Using captured context from \(captured.applicationName): \(captured.text.prefix(50))...")
-        } else {
-            // No captured context - use empty context (not static config)
-            log(.debug, "updateConfig: No captured context, using empty context")
+        // Step 1: Add user context first (has priority)
+        let userContext = settings.context.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !userContext.isEmpty {
+            mergedContext = userContext
+            log(.debug, "updateConfig: User context: \(userContext.count) chars")
         }
 
-        log(.debug, "updateConfig: Final context has \(contextLines.count) items")
+        // Step 2: Add auto-captured context if enabled and space available
+        if settings.contextCaptureEnabled,
+           let captured = capturedContext,
+           captured.hasContent {
+
+            let maxLength = settings.maxContextLength
+            let remainingSpace = maxLength - mergedContext.count
+
+            if remainingSpace > 0 {
+                let separator = mergedContext.isEmpty ? "" : "\n\n---\n\n"
+                let availableForCapture = remainingSpace - separator.count
+
+                if availableForCapture > 0 {
+                    let capturedText = captured.text
+                    let truncatedCapture: String
+                    if capturedText.count <= availableForCapture {
+                        truncatedCapture = capturedText
+                    } else {
+                        // Truncate from beginning (keep most recent at end)
+                        let startIndex = capturedText.index(capturedText.endIndex, offsetBy: -availableForCapture)
+                        truncatedCapture = String(capturedText[startIndex...])
+                    }
+
+                    mergedContext += separator + truncatedCapture
+                    log(.debug, "updateConfig: Auto-captured: \(capturedText.count) -> \(truncatedCapture.count) chars")
+                }
+            }
+        }
+
+        // Build contextLines
+        var contextLines: [String] = []
+        if !mergedContext.isEmpty {
+            contextLines = [mergedContext]
+            log(.info, "updateConfig: Final merged context: \(mergedContext.count) chars")
+        } else {
+            log(.debug, "updateConfig: No context (empty)")
+        }
 
         currentConfig = ASRConfig(
             appKey: settings.appKey,
@@ -104,9 +139,13 @@ class TranscriptionViewModel: ObservableObject {
     func setCapturedContext(_ context: CapturedTextContext?) {
         capturedContext = context
         if let context = context {
+            capturedContextText = context.text
+            capturedContextSource = context.applicationName
             log(.info, "setCapturedContext: \(context.text.count) chars from \(context.applicationName)")
             log(.debug, "Context preview: \(context.text.prefix(100))...")
         } else {
+            capturedContextText = ""
+            capturedContextSource = ""
             log(.debug, "setCapturedContext: Clearing context (nil)")
         }
         // Update config to include the new context (or exclude if nil)
