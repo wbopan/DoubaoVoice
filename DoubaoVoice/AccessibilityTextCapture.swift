@@ -116,15 +116,42 @@ class AccessibilityTextCapture {
         // Try to get document path
         let documentPath = getDocumentPath(from: appElement)
 
-        if text.isEmpty {
+        // Fallback to file content if text capture is minimal
+        var finalText = text
+        if text.isEmpty || text.count < 10 {
+            if let path = documentPath {
+                logger.info("Text capture minimal (\(text.count) chars), attempting file fallback: \(path)")
+
+                // Synchronous read since this method is synchronous
+                let semaphore = DispatchSemaphore(value: 0)
+                var fileContent: String?
+                Task {
+                    fileContent = await DocumentContentReader.shared.readContent(
+                        from: path,
+                        maxLength: AppSettings.shared.maxContextLength
+                    )
+                    semaphore.signal()
+                }
+                semaphore.wait()
+
+                if let content = fileContent {
+                    logger.info("File fallback success: \(content.count) chars from \(path)")
+                    finalText = content
+                } else {
+                    logger.info("File fallback failed for: \(path)")
+                }
+            }
+        }
+
+        if finalText.isEmpty {
             logger.info("No text captured from \(appInfo.name)")
             return nil
         }
 
-        logger.info("Captured \(text.count) characters from \(appInfo.name)")
+        logger.info("Captured \(finalText.count) characters from \(appInfo.name)")
 
         return CapturedTextContext(
-            text: text,
+            text: finalText,
             documentPath: documentPath,
             applicationName: appInfo.name,
             bundleIdentifier: appInfo.bundleID,
