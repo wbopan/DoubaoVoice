@@ -20,31 +20,29 @@ class FloatingWindowController: NSWindowController {
 
     /// Calculate window position based on the selected mode
     private static func calculateWindowPosition(mode: WindowPositionMode, windowSize: NSSize, settings: AppSettings) -> NSPoint {
-        let logger = Logger.ui
-        logger.info("Calculating window position for mode: \(mode.rawValue)")
+        log(.info, "Calculating window position for mode: \(mode.rawValue)")
 
         guard let screen = NSScreen.main else {
-            logger.warning("No main screen available, using default position")
+            log(.warning, "No main screen available, using default position")
             return NSPoint(x: 100, y: 100)
         }
 
         let visibleFrame = screen.visibleFrame
-        logger.debug("Screen visible frame: \(String(describing: visibleFrame))")
+        log(.debug, "Screen visible frame: \(String(describing: visibleFrame))")
 
         switch mode {
         case .rememberLast:
             // Try to load saved position, fallback to center
             if let savedPosition = settings.getSavedWindowPosition() {
-                logger.info("Using saved window position: \(String(describing: savedPosition))")
+                log(.info, "Using saved window position: \(String(describing: savedPosition))")
                 return savedPosition
-            } else {
-                // Center the window
-                let x = visibleFrame.origin.x + (visibleFrame.width - windowSize.width) / 2
-                let y = visibleFrame.origin.y + (visibleFrame.height - windowSize.height) / 2
-                let position = NSPoint(x: x, y: y)
-                logger.info("No saved position, centering window at: \(String(describing: position))")
-                return position
             }
+            // Center the window
+            let x = visibleFrame.origin.x + (visibleFrame.width - windowSize.width) / 2
+            let y = visibleFrame.origin.y + (visibleFrame.height - windowSize.height) / 2
+            let position = NSPoint(x: x, y: y)
+            log(.info, "No saved position, centering window at: \(String(describing: position))")
+            return position
 
         case .nearMouse:
             // Get mouse position and offset slightly
@@ -71,7 +69,7 @@ class FloatingWindowController: NSWindowController {
             }
 
             let position = NSPoint(x: x, y: y)
-            logger.info("Positioning near mouse at: \(String(describing: position)) (mouse: \(String(describing: mouseLocation)))")
+            log(.info, "Positioning near mouse at: \(String(describing: position)) (mouse: \(String(describing: mouseLocation)))")
             return position
 
         case .topCenter:
@@ -79,7 +77,7 @@ class FloatingWindowController: NSWindowController {
             let x = visibleFrame.origin.x + (visibleFrame.width - windowSize.width) / 2
             let y = visibleFrame.maxY - windowSize.height - 50
             let position = NSPoint(x: x, y: y)
-            logger.info("Positioning at top center: \(String(describing: position))")
+            log(.info, "Positioning at top center: \(String(describing: position))")
             return position
 
         case .bottomCenter:
@@ -87,7 +85,7 @@ class FloatingWindowController: NSWindowController {
             let x = visibleFrame.origin.x + (visibleFrame.width - windowSize.width) / 2
             let y = visibleFrame.minY + 50
             let position = NSPoint(x: x, y: y)
-            logger.info("Positioning at bottom center: \(String(describing: position))")
+            log(.info, "Positioning at bottom center: \(String(describing: position))")
             return position
         }
     }
@@ -335,33 +333,50 @@ class FloatingWindowController: NSWindowController {
     /// Synchronously capture raw context from the previously focused application
     /// Returns the raw context without processing (processing is done in showWindow's Task)
     private func performSynchronousCapture() -> CapturedTextContext? {
-        guard settings.contextCaptureEnabled && settings.autoCaptureOnActivate else {
-            logger.debug("Context capture disabled, skipping")
+        guard settings.contextCaptureEnabled else {
+            log(.debug, "Context capture disabled")
             return nil
         }
 
         // Log the current frontmost app at the moment of capture
         let currentFrontmost = NSWorkspace.shared.frontmostApplication
-        logger.debug("performSynchronousCapture - current frontmost: \(currentFrontmost?.localizedName ?? "nil")")
+        log(.debug, "performSynchronousCapture - frontmost app: \(currentFrontmost?.localizedName ?? "nil")")
 
         // Check accessibility permission
         guard AccessibilityTextCapture.shared.checkPermission(prompt: false) else {
-            logger.warning("Accessibility permission not granted")
+            log(.warning, "Accessibility permission not granted for context capture")
             return nil
         }
 
-        // Use AccessibilityTextCapture (with browser support)
-        if let context = AccessibilityTextCapture.shared.captureFromFocusedApp() {
-            if let path = context.documentPath {
-                let filename = (path as NSString).lastPathComponent
-                logger.info("Captured \(context.text.count) chars from \(context.applicationName) [\(filename)]")
-            } else {
-                logger.info("Captured \(context.text.count) chars from \(context.applicationName)")
+        // Use the previously captured app info if available (more reliable for browsers)
+        // This avoids timing issues where the focused app changes during capture
+        if let prevApp = previousActiveApp,
+           let bundleId = prevApp.bundleIdentifier,
+           let appName = prevApp.localizedName {
+            log(.debug, "Using previousActiveApp for capture: \(appName) (\(bundleId))")
+            if let context = AccessibilityTextCapture.shared.captureFromApp(bundleId: bundleId, appName: appName) {
+                if let path = context.documentPath {
+                    let filename = (path as NSString).lastPathComponent
+                    log(.info, "Captured \(context.text.count) chars from \(context.applicationName) [\(filename)]")
+                } else {
+                    log(.info, "Captured \(context.text.count) chars from \(context.applicationName)")
+                }
+                return context
             }
-            return context
+        } else {
+            // Fall back to generic capture if no previous app info
+            if let context = AccessibilityTextCapture.shared.captureFromFocusedApp() {
+                if let path = context.documentPath {
+                    let filename = (path as NSString).lastPathComponent
+                    log(.info, "Captured \(context.text.count) chars from \(context.applicationName) [\(filename)]")
+                } else {
+                    log(.info, "Captured \(context.text.count) chars from \(context.applicationName)")
+                }
+                return context
+            }
         }
 
-        logger.info("No context captured from previous app")
+        log(.info, "No context captured from previous app")
         return nil
     }
 

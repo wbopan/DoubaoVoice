@@ -64,15 +64,54 @@ private enum BrowserType {
 class AccessibilityTextCapture {
     static let shared = AccessibilityTextCapture()
 
-    private let logger = Logger.accessibility
-
     /// Map of browser bundle IDs to their types
     private let browsers: [String: BrowserType] = [
+        // Safari
         "com.apple.Safari": .safari,
+
+        // Chrome 系列
         "com.google.Chrome": .chrome,
+        "com.google.Chrome.canary": .chrome,
+
+        // Microsoft Edge
         "com.microsoft.edgemac": .chrome,
-        "company.thebrowser.Browser": .chrome  // Arc
+
+        // Arc
+        "company.thebrowser.Browser": .chrome,
+
+        // Brave
+        "com.brave.Browser": .chrome,
+
+        // Opera
+        "com.operasoftware.Opera": .chrome,
+        "com.operasoftware.OperaGX": .chrome,
+
+        // Vivaldi
+        "com.vivaldi.Vivaldi": .chrome,
+
+        // Chromium
+        "org.chromium.Chromium": .chrome,
+
+        // DuckDuckGo
+        "com.duckduckgo.macos.browser": .chrome,
+
+        // Sidekick
+        "com.pushplaylabs.sidekick": .chrome
+
+        // Note: Dia (company.thebrowser.dia) is NOT supported
+        // It doesn't expose Chrome's AppleScript API ("Expected end of line but found class name")
+        // and returns 0 chars via Accessibility API
     ]
+
+    // MARK: - Fallback Configuration
+
+    /// 文件内容与 Accessibility 文本长度比值阈值
+    /// 如果文件内容超过此倍数，优先使用文件
+    private let filePreferenceRatio: Double = 3.0
+
+    /// 最小"足够"文本长度
+    /// 低于此值时，始终尝试文件回退
+    private let minAdequateTextLength: Int = 100
 
     private init() {}
 
@@ -82,25 +121,54 @@ class AccessibilityTextCapture {
     /// - Parameter prompt: If true, shows system prompt to request permission
     /// - Returns: true if permission is granted
     func checkPermission(prompt: Bool = false) -> Bool {
-        let options: [String: Any]
-        if prompt {
-            options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
-        } else {
-            options = [:]
-        }
+        let options: [String: Any] = prompt
+            ? [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
+            : [:]
         return AXIsProcessTrustedWithOptions(options as CFDictionary)
     }
 
     // MARK: - Text Capture
 
+    /// Capture text from a known application (used when we already know the app info)
+    /// This is more reliable for browsers since it doesn't depend on AX API to get the focused app
+    /// - Parameters:
+    ///   - bundleId: The bundle identifier of the application
+    ///   - appName: The name of the application
+    /// - Returns: CapturedTextContext with the captured text, or nil if capture failed
+    func captureFromApp(bundleId: String, appName: String) -> CapturedTextContext? {
+        log(.info, "Starting text capture from known app: \(appName) (\(bundleId))")
+
+        // Check if this is a browser - use AppleScript + JavaScript for page content
+        // This is tried FIRST before any AX API calls to avoid timing issues
+        if let browserType = browsers[bundleId] {
+            let browserTypeName = browserType == .safari ? "Safari" : "Chromium"
+            log(.info, "Detected browser: \(appName) (type: \(browserTypeName))")
+            if let text = captureFromBrowser(bundleId: bundleId, type: browserType),
+               !text.isEmpty {
+                log(.info, "Browser capture success: \(text.count) chars via AppleScript+JS")
+                return CapturedTextContext(
+                    text: text,
+                    documentPath: nil,
+                    applicationName: appName,
+                    bundleIdentifier: bundleId,
+                    capturedAt: Date()
+                )
+            }
+            log(.warning, "AppleScript capture failed for browser, falling back to AX API")
+        }
+
+        // Fall back to the general capture method
+        return captureFromFocusedApp()
+    }
+
     /// Capture text from the currently focused application
     /// - Returns: CapturedTextContext with the captured text, or nil if capture failed
     func captureFromFocusedApp() -> CapturedTextContext? {
-        logger.info("Starting text capture from focused app")
+        log(.info, "Starting text capture from focused app")
 
         // Check permission first
         guard checkPermission(prompt: false) else {
-            logger.warning("Accessibility permission not granted")
+            log(.warning, "Accessibility permission not granted")
             return nil
         }
 
@@ -117,7 +185,7 @@ class AccessibilityTextCapture {
 
         guard appResult == .success,
               let focusedApp = focusedAppRef else {
-            logger.warning("Failed to get focused application: \(appResult.rawValue)")
+            log(.warning, "Failed to get focused application: \(appResult.rawValue)")
             return nil
         }
 
@@ -125,14 +193,16 @@ class AccessibilityTextCapture {
 
         // Get application info
         let appInfo = getApplicationInfo(from: appElement)
-        logger.info("Capturing from: \(appInfo.name) (\(appInfo.bundleID ?? "unknown"))")
+        log(.info, "Capturing from: \(appInfo.name) (\(appInfo.bundleID ?? "unknown"))")
 
         // Check if this is a browser - use AppleScript + JavaScript for page content
         if let bundleId = appInfo.bundleID,
            let browserType = browsers[bundleId] {
+            let browserTypeName = browserType == .safari ? "Safari" : "Chromium"
+            log(.info, "Detected browser: \(appInfo.name) (type: \(browserTypeName))")
             if let text = captureFromBrowser(bundleId: bundleId, type: browserType),
                !text.isEmpty {
-                logger.info("Captured \(text.count) chars from browser via AppleScript")
+                log(.info, "Browser capture success: \(text.count) chars via AppleScript+JS")
                 return CapturedTextContext(
                     text: text,
                     documentPath: nil,
@@ -141,48 +211,83 @@ class AccessibilityTextCapture {
                     capturedAt: Date()
                 )
             }
-            logger.debug("AppleScript capture failed, falling back to Accessibility API")
+            log(.warning, "AppleScript capture failed, falling back to Accessibility API")
         }
 
         // Non-browser apps or browser fallback: use Accessibility API
-        let text = captureText(from: appElement)
+        let accessibilityText = captureText(from: appElement)
+        log(.info, "Accessibility API captured \(accessibilityText.count) chars")
 
         // Try to get document path
         let documentPath = getDocumentPath(from: appElement)
+        if let path = documentPath {
+            log(.debug, "Document path found: \(path)")
+        } else {
+            log(.debug, "No document path available")
+        }
 
-        // Fallback to file content if text capture is minimal
-        var finalText = text
-        if text.isEmpty || text.count < 10 {
-            if let path = documentPath {
-                logger.info("Text capture minimal (\(text.count) chars), attempting file fallback: \(path)")
+        // Smart fallback logic: compare accessibility text with file content
+        var finalText = accessibilityText
+        var usedSource = "accessibility"
 
-                // Synchronous read since this method is synchronous
-                let semaphore = DispatchSemaphore(value: 0)
-                var fileContent: String?
-                Task {
-                    fileContent = await DocumentContentReader.shared.readContent(
-                        from: path,
-                        maxLength: AppSettings.shared.maxContextLength
-                    )
-                    semaphore.signal()
-                }
-                semaphore.wait()
+        if let path = documentPath {
+            // Always try to read file content for comparison
+            log(.info, "Attempting file read for comparison: \(path)")
 
-                if let content = fileContent {
-                    logger.info("File fallback success: \(content.count) chars from \(path)")
-                    finalText = content
+            // Capture maxLength before Task to avoid MainActor deadlock
+            let maxLength = AppSettings.shared.maxContextLength
+
+            // Synchronous read since this method is synchronous
+            let semaphore = DispatchSemaphore(value: 0)
+            var fileContent: String?
+            Task.detached {
+                fileContent = await DocumentContentReader.shared.readContent(
+                    from: path,
+                    maxLength: maxLength
+                )
+                semaphore.signal()
+            }
+            semaphore.wait()
+
+            if let content = fileContent {
+                log(.info, "File read success: \(content.count) chars from \(path)")
+
+                // Decide which source to use
+                let shouldPreferFile: Bool
+                let reason: String
+
+                if accessibilityText.isEmpty {
+                    shouldPreferFile = true
+                    reason = "accessibility text is empty"
+                } else if accessibilityText.count < minAdequateTextLength {
+                    shouldPreferFile = true
+                    reason = "accessibility text too short (\(accessibilityText.count) < \(minAdequateTextLength))"
+                } else if Double(content.count) > Double(accessibilityText.count) * filePreferenceRatio {
+                    shouldPreferFile = true
+                    reason = "file is \(String(format: "%.1fx", Double(content.count) / Double(accessibilityText.count))) longer"
                 } else {
-                    logger.info("File fallback failed for: \(path)")
+                    shouldPreferFile = false
+                    reason = "accessibility text is adequate (\(accessibilityText.count) chars)"
                 }
+
+                if shouldPreferFile {
+                    log(.info, "Using FILE content: \(reason)")
+                    finalText = content
+                    usedSource = "file"
+                } else {
+                    log(.info, "Using ACCESSIBILITY content: \(reason)")
+                }
+            } else {
+                log(.debug, "File read failed or unsupported type: \(path)")
             }
         }
 
         if finalText.isEmpty {
-            logger.info("No text captured from \(appInfo.name)")
+            log(.info, "No text captured from \(appInfo.name)")
             return nil
         }
 
-        logger.info("Captured \(finalText.count) characters from \(appInfo.name)")
+        log(.info, "Final result: \(finalText.count) chars from \(usedSource) [\(appInfo.name)]")
 
         return CapturedTextContext(
             text: finalText,
@@ -229,7 +334,7 @@ class AccessibilityTextCapture {
         }
 
         if let error = error {
-            logger.warning("AppleScript error for \(bundleId): \(error)")
+            log(.warning, "AppleScript error for \(bundleId): \(error)")
         }
 
         return nil
@@ -273,13 +378,13 @@ class AccessibilityTextCapture {
 
             // Try to get value from focused element (works for text fields, editors)
             if let text = getTextValue(from: focusedElement) {
-                logger.debug("Got text from focused element")
+                log(.debug, "Got text from focused element")
                 return text
             }
 
             // Try to get selected text
             if let selectedText = getSelectedText(from: focusedElement), !selectedText.isEmpty {
-                logger.debug("Got selected text from focused element")
+                log(.debug, "Got selected text from focused element")
                 return selectedText
             }
         }
@@ -295,7 +400,7 @@ class AccessibilityTextCapture {
 
             // Try to find text areas in the window
             if let text = findTextInChildren(of: windowElement, maxDepth: 5) {
-                logger.debug("Got text from window children")
+                log(.debug, "Got text from window children")
                 return text
             }
         }

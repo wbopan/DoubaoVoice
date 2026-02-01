@@ -29,26 +29,22 @@ Seedling/
 
 ## Logging System
 
-The application uses Apple's unified logging system (OSLog/Logger API) for debug output and diagnostics. Actively use debug logs.
+Use the global `log()` function defined in `Utilities.swift`. This outputs to stderr so logs appear in the terminal when running via `./run.sh`.
 
-- **`.debug`** - Detailed debugging information (verbose, only in DEBUG builds)
+```swift
+log(.debug, "Payload compressed: \(size) bytes")
+log(.info, "Connecting to Seed ASR...")
+log(.warning, "Connection retry attempt \(count)")
+log(.error, "Failed to connect: \(error)")
+```
+
+**Log levels**:
+- **`.debug`** - Detailed debugging information
 - **`.info`** - Important state changes and milestones
 - **`.warning`** - Potential issues that don't break functionality
 - **`.error`** - Critical errors that prevent functionality
 
-```swift
-// Basic logging (uses general category)
-log(.info, "Starting transcription session...")
-log(.error, "Failed to connect: \(error)")
-log(.debug, "Audio buffer size: \(bufferSize) bytes")
-
-// Category-specific logging (recommended for new code)
-import OSLog
-private let logger = Logger.asr
-
-logger.info("Connecting to Seed ASR...")
-logger.debug("Payload compressed: \(size) bytes")
-```
+**Conventions**: Use plain text without emojis. Format as "Action/State: details". Keep messages concise and include relevant metrics.
 
 ## Creating Worktrees
 

@@ -34,7 +34,6 @@ struct ASRConfig: Sendable {
     let appKey: String
     let accessKey: String
     let resourceID: String
-    let enableVAD: Bool
     let language: String
     let format: String
     let sampleRate: Int
@@ -45,7 +44,6 @@ struct ASRConfig: Sendable {
         appKey: String,
         accessKey: String,
         resourceID: String = ASRConstants.resourceID,
-        enableVAD: Bool = true,
         language: String = "zh-CN",
         format: String = "pcm",
         sampleRate: Int = Int(ASRConstants.sampleRate),
@@ -55,7 +53,6 @@ struct ASRConfig: Sendable {
         self.appKey = appKey
         self.accessKey = accessKey
         self.resourceID = resourceID
-        self.enableVAD = enableVAD
         self.language = language
         self.format = format
         self.sampleRate = sampleRate
@@ -535,12 +532,13 @@ extension String {
     /// Full-width: 。！？；：，、
     /// Half-width: . ! ? ; : ,
     func removingTrailingPunctuation() -> String {
-        let fullWidthPunctuation: Set<Character> = ["。", "！", "？", "；", "：", "，", "、"]
-        let halfWidthPunctuation: Set<Character> = [".", "!", "?", ";", ":", ","]
-        let allPunctuation = fullWidthPunctuation.union(halfWidthPunctuation)
+        let punctuation: Set<Character> = [
+            "。", "！", "？", "；", "：", "，", "、",  // Full-width
+            ".", "!", "?", ";", ":", ","              // Half-width
+        ]
 
         var result = self
-        while let lastChar = result.last, allPunctuation.contains(lastChar) {
+        while let lastChar = result.last, punctuation.contains(lastChar) {
             result.removeLast()
         }
         return result
@@ -566,7 +564,6 @@ enum UserDefaultsKeys {
     static let accessKey = "Seedling.AccessKey"
     static let resourceID = "Seedling.ResourceID"
     static let httpPort = "Seedling.HTTPPort"
-    static let enableVAD = "Seedling.EnableVAD"
     static let globalHotkeyKeyCode = "Seedling.GlobalHotkeyKeyCode"
     static let globalHotkeyModifiers = "Seedling.GlobalHotkeyModifiers"
     static let rememberWindowPosition = "Seedling.RememberWindowPosition"
@@ -582,12 +579,10 @@ enum UserDefaultsKeys {
     static let longPressEnabled = "Seedling.LongPressEnabled"
     static let longPressModifierKey = "Seedling.LongPressModifierKey"
     static let longPressMinDuration = "Seedling.LongPressMinDuration"
-    static let longPressAutoSubmit = "Seedling.LongPressAutoSubmit"
     static let context = "Seedling.Context"
 
     // Context capture settings
     static let contextCaptureEnabled = "Seedling.ContextCaptureEnabled"
-    static let autoCaptureOnActivate = "Seedling.AutoCaptureOnActivate"
     static let maxContextLength = "Seedling.MaxContextLength"
 
     static let defaultPort = 18888
@@ -641,13 +636,11 @@ struct LongPressConfig: Codable, Equatable {
     var enabled: Bool
     var modifierKey: LongPressModifierKey
     var minimumPressDuration: TimeInterval
-    var autoSubmitOnRelease: Bool
 
     static let `default` = LongPressConfig(
-        enabled: false,
-        modifierKey: .option,
-        minimumPressDuration: 0.15,
-        autoSubmitOnRelease: true
+        enabled: true,
+        modifierKey: .shift,
+        minimumPressDuration: 0.15
     )
 }
 
@@ -760,10 +753,6 @@ class AppSettings: ObservableObject {
         ASRConstants.resourceID
     }
 
-    @Published var enableVAD: Bool {
-        didSet { defaults.set(enableVAD, forKey: UserDefaultsKeys.enableVAD) }
-    }
-
     @Published var globalHotkey: HotkeyConfig {
         didSet {
             defaults.set(globalHotkey.keyCode, forKey: UserDefaultsKeys.globalHotkeyKeyCode)
@@ -814,10 +803,6 @@ class AppSettings: ObservableObject {
         didSet { defaults.set(contextCaptureEnabled, forKey: UserDefaultsKeys.contextCaptureEnabled) }
     }
 
-    @Published var autoCaptureOnActivate: Bool {
-        didSet { defaults.set(autoCaptureOnActivate, forKey: UserDefaultsKeys.autoCaptureOnActivate) }
-    }
-
     @Published var maxContextLength: Int {
         didSet { defaults.set(maxContextLength, forKey: UserDefaultsKeys.maxContextLength) }
     }
@@ -826,7 +811,6 @@ class AppSettings: ObservableObject {
         // Load saved values or use defaults (from reference.py credentials)
         self.appKey = defaults.string(forKey: UserDefaultsKeys.appKey) ?? "3254061168"
         self.accessKey = defaults.string(forKey: UserDefaultsKeys.accessKey) ?? "1jFY86tc4aNrg-8K69dIM43HSjJ_jhyb"
-        self.enableVAD = defaults.object(forKey: UserDefaultsKeys.enableVAD) as? Bool ?? true
 
         // Load hotkey config
         let keyCode = defaults.object(forKey: UserDefaultsKeys.globalHotkeyKeyCode) as? UInt32 ?? HotkeyConfig.default.keyCode
@@ -856,7 +840,7 @@ class AppSettings: ObservableObject {
 
         self.autoPasteAfterClose = defaults.object(forKey: UserDefaultsKeys.autoPasteAfterClose) as? Bool ?? true
 
-        self.removeTrailingPunctuation = defaults.object(forKey: UserDefaultsKeys.removeTrailingPunctuation) as? Bool ?? false
+        self.removeTrailingPunctuation = defaults.object(forKey: UserDefaultsKeys.removeTrailingPunctuation) as? Bool ?? true
 
         // Load long-press config
         if let configData = defaults.data(forKey: UserDefaultsKeys.longPressEnabled),
@@ -870,8 +854,7 @@ class AppSettings: ObservableObject {
         self.context = defaults.string(forKey: UserDefaultsKeys.context) ?? ""
 
         // Load context capture settings
-        self.contextCaptureEnabled = defaults.object(forKey: UserDefaultsKeys.contextCaptureEnabled) as? Bool ?? false
-        self.autoCaptureOnActivate = defaults.object(forKey: UserDefaultsKeys.autoCaptureOnActivate) as? Bool ?? true
+        self.contextCaptureEnabled = defaults.object(forKey: UserDefaultsKeys.contextCaptureEnabled) as? Bool ?? true
         self.maxContextLength = defaults.object(forKey: UserDefaultsKeys.maxContextLength) as? Int ?? UserDefaultsKeys.defaultMaxContextLength
 
         // Migrate: Remove deprecated resourceID setting

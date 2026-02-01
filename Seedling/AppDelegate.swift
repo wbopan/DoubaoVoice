@@ -149,11 +149,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @MainActor
     private func handleDoubleTapHoldRelease() {
-        guard settings.longPressConfig.autoSubmitOnRelease else {
-            log(.debug, "Auto-submit on release is disabled, ignoring release")
-            return
-        }
-
         // Check if we have a visible window
         guard let controller = floatingWindowController,
               controller.window?.isVisible == true else {
@@ -460,12 +455,9 @@ class ModifierKeyMonitor {
 
     /// Check if Accessibility permission is granted
     static func checkAccessibilityPermission(prompt: Bool = false) -> Bool {
-        let options: [String: Any]
-        if prompt {
-            options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
-        } else {
-            options = [:]
-        }
+        let options: [String: Any] = prompt
+            ? [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
+            : [:]
         return AXIsProcessTrustedWithOptions(options as CFDictionary)
     }
 }

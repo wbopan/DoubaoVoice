@@ -99,14 +99,10 @@ class TranscriptionViewModel: ObservableObject {
 
                 if availableForCapture > 0 {
                     let capturedText = captured.text
-                    let truncatedCapture: String
-                    if capturedText.count <= availableForCapture {
-                        truncatedCapture = capturedText
-                    } else {
-                        // Truncate from beginning (keep most recent at end)
-                        let startIndex = capturedText.index(capturedText.endIndex, offsetBy: -availableForCapture)
-                        truncatedCapture = String(capturedText[startIndex...])
-                    }
+                    // Truncate from beginning if needed (keep most recent at end)
+                    let truncatedCapture = capturedText.count <= availableForCapture
+                        ? capturedText
+                        : String(capturedText.suffix(availableForCapture))
 
                     mergedContext += separator + truncatedCapture
                     log(.debug, "updateConfig: Auto-captured: \(capturedText.count) -> \(truncatedCapture.count) chars")
@@ -127,7 +123,6 @@ class TranscriptionViewModel: ObservableObject {
             appKey: settings.appKey,
             accessKey: settings.accessKey,
             resourceID: settings.resourceID,
-            enableVAD: settings.enableVAD,
             language: "zh-CN",
             contextLines: contextLines
         )
