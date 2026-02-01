@@ -1,6 +1,6 @@
 //
 //  AppDelegate.swift
-//  DoubaoVoice
+//  Seedling
 //
 //  Core app coordinator for menu bar app with global hotkey
 //
@@ -52,7 +52,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             object: nil
         )
 
-        log(.info, "DoubaoVoice menu bar app launched")
+        log(.info, "Seedling menu bar app launched")
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -68,7 +68,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "waveform.circle.fill", accessibilityDescription: "DoubaoVoice")
+            button.image = NSImage(systemSymbolName: "waveform.circle.fill", accessibilityDescription: "Seedling")
             button.image?.isTemplate = true
         }
 

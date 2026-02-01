@@ -1,6 +1,6 @@
 //
 //  TranscriptionViewModel.swift
-//  DoubaoVoice
+//  Seedling
 //
 //  View model coordinating recording and transcription
 //
@@ -45,7 +45,7 @@ class TranscriptionViewModel: ObservableObject {
     private var audioActuallyStarted = false  // Track if audio recording was actually started
 
     private let audioRecorder = AudioRecorder()
-    private let asrClient = DoubaoASRClient()
+    private let asrClient = ASRClient()
     private var recordingStartTime: Date?
     private var currentConfig: ASRConfig?
     private var capturedContext: CapturedTextContext?

@@ -2,14 +2,14 @@
 
 set -e
 
-echo "🔨 Building DoubaoVoice..."
-xcodebuild -project DoubaoVoice.xcodeproj \
-    -scheme DoubaoVoice \
+echo "🔨 Building Seedling..."
+xcodebuild -project Seedling.xcodeproj \
+    -scheme Seedling \
     -configuration Debug \
     -derivedDataPath ./build \
     build | xcbeautify || cat
 
-APP_PATH="./build/Build/Products/Debug/DoubaoVoice.app"
+APP_PATH="./build/Build/Products/Debug/Seedling.app"
 
 if [ -d "$APP_PATH" ]; then
     echo ""

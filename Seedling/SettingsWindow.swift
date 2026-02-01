@@ -1,6 +1,6 @@
 //
 //  SettingsWindow.swift
-//  DoubaoVoice
+//  Seedling
 //
 //  Settings panel with API configuration and hotkey recorder
 //
@@ -141,7 +141,7 @@ struct APISettingsTab: View {
                 SecureField("Access Key:", text: $accessKey)
                     .textFieldStyle(.roundedBorder)
             } header: {
-                Text("Doubao API Credentials")
+                Text("Seed ASR Credentials")
                     .font(.headline)
             }
 
@@ -541,7 +541,7 @@ struct DoubleTapHoldModifierSection: View {
 // MARK: - About Tab
 
 struct AboutTab: View {
-    private let appName = Bundle.main.infoDictionary?["CFBundleName"] as? String ?? "DoubaoVoice"
+    private let appName = Bundle.main.infoDictionary?["CFBundleName"] as? String ?? "Seedling"
     private let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
 
     var body: some View {
@@ -560,7 +560,7 @@ struct AboutTab: View {
                 .font(.subheadline)
                 .foregroundColor(.secondary)
 
-            Text("Real-time speech-to-text transcription using the Doubao ASR API")
+            Text("Real-time speech-to-text transcription using the Seed ASR API")
                 .font(.body)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)

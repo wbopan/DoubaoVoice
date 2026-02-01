@@ -1,6 +1,6 @@
 //
-//  DoubaoVoiceApp.swift
-//  DoubaoVoice
+//  SeedlingApp.swift
+//  Seedling
 //
 //  Menu bar app entry point
 //
@@ -8,7 +8,7 @@
 import SwiftUI
 
 @main
-struct DoubaoVoiceApp: App {
+struct SeedlingApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {

@@ -7,13 +7,13 @@
 	objects = {
 
 /* Begin PBXFileReference section */
-		5A846FF62F21B8B900CBA392 /* DoubaoVoice.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DoubaoVoice.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		5A846FF62F21B8B900CBA392 /* Seedling.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Seedling.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		5A846FF82F21B8B900CBA392 /* DoubaoVoice */ = {
+		5A846FF82F21B8B900CBA392 /* Seedling */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = DoubaoVoice;
+			path = Seedling;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -32,7 +32,7 @@
 		5A846FED2F21B8B900CBA392 = {
 			isa = PBXGroup;
 			children = (
-				5A846FF82F21B8B900CBA392 /* DoubaoVoice */,
+				5A846FF82F21B8B900CBA392 /* Seedling */,
 				5A846FF72F21B8B900CBA392 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -40,7 +40,7 @@
 		5A846FF72F21B8B900CBA392 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				5A846FF62F21B8B900CBA392 /* DoubaoVoice.app */,
+				5A846FF62F21B8B900CBA392 /* Seedling.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -48,9 +48,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		5A846FF52F21B8B900CBA392 /* DoubaoVoice */ = {
+		5A846FF52F21B8B900CBA392 /* Seedling */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 5A8470012F21B8BB00CBA392 /* Build configuration list for PBXNativeTarget "DoubaoVoice" */;
+			buildConfigurationList = 5A8470012F21B8BB00CBA392 /* Build configuration list for PBXNativeTarget "Seedling" */;
 			buildPhases = (
 				5A846FF22F21B8B900CBA392 /* Sources */,
 				5A846FF32F21B8B900CBA392 /* Frameworks */,
@@ -61,13 +61,13 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				5A846FF82F21B8B900CBA392 /* DoubaoVoice */,
+				5A846FF82F21B8B900CBA392 /* Seedling */,
 			);
-			name = DoubaoVoice;
+			name = Seedling;
 			packageProductDependencies = (
 			);
-			productName = DoubaoVoice;
-			productReference = 5A846FF62F21B8B900CBA392 /* DoubaoVoice.app */;
+			productName = Seedling;
+			productReference = 5A846FF62F21B8B900CBA392 /* Seedling.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -85,7 +85,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 5A846FF12F21B8B900CBA392 /* Build configuration list for PBXProject "DoubaoVoice" */;
+			buildConfigurationList = 5A846FF12F21B8B900CBA392 /* Build configuration list for PBXProject "Seedling" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -99,7 +99,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				5A846FF52F21B8B900CBA392 /* DoubaoVoice */,
+				5A846FF52F21B8B900CBA392 /* Seedling */,
 			);
 		};
 /* End PBXProject section */
@@ -250,7 +250,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = DoubaoVoice/DoubaoVoice.entitlements;
+				CODE_SIGN_ENTITLEMENTS = Seedling/Seedling.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
@@ -271,13 +271,13 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "DoubaoVoice needs microphone access for voice transcription";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Seedling needs microphone access for voice transcription";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.wenbopan.DoubaoVoice;
+				PRODUCT_BUNDLE_IDENTIFIER = com.wenbopan.Seedling;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -294,7 +294,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = DoubaoVoice/DoubaoVoice.entitlements;
+				CODE_SIGN_ENTITLEMENTS = Seedling/Seedling.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
@@ -315,13 +315,13 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "DoubaoVoice needs microphone access for voice transcription";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Seedling needs microphone access for voice transcription";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.wenbopan.DoubaoVoice;
+				PRODUCT_BUNDLE_IDENTIFIER = com.wenbopan.Seedling;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -336,7 +336,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		5A846FF12F21B8B900CBA392 /* Build configuration list for PBXProject "DoubaoVoice" */ = {
+		5A846FF12F21B8B900CBA392 /* Build configuration list for PBXProject "Seedling" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				5A846FFF2F21B8BB00CBA392 /* Debug */,
@@ -345,7 +345,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		5A8470012F21B8BB00CBA392 /* Build configuration list for PBXNativeTarget "DoubaoVoice" */ = {
+		5A8470012F21B8BB00CBA392 /* Build configuration list for PBXNativeTarget "Seedling" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				5A8470022F21B8BB00CBA392 /* Debug */,

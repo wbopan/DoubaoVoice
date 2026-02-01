@@ -1,8 +1,8 @@
 //
-//  DoubaoASRClient.swift
-//  DoubaoVoice
+//  ASRClient.swift
+//  Seedling
 //
-//  WebSocket client for Doubao ASR API with binary protocol
+//  WebSocket client for Seed ASR API with binary protocol
 //
 
 import Foundation
@@ -192,8 +192,8 @@ enum BinaryProtocol {
 
 // MARK: - ASR Client Actor
 
-/// Thread-safe WebSocket client for Doubao ASR
-actor DoubaoASRClient {
+/// Thread-safe WebSocket client for Seed ASR
+actor ASRClient {
     private var webSocketTask: URLSessionWebSocketTask?
     private var session: URLSession?
     private var resultContinuation: AsyncStream<ASRResult>.Continuation?
@@ -203,7 +203,7 @@ actor DoubaoASRClient {
 
     // MARK: - Connection Management
 
-    /// Connect to Doubao ASR WebSocket
+    /// Connect to Seed ASR WebSocket
     func connect(config: ASRConfig) async throws {
         // If a previous session exists, clean it up first to ensure proper state reset
         if session != nil {
@@ -219,10 +219,10 @@ actor DoubaoASRClient {
             return
         }
 
-        log(.info, "Connecting to Doubao ASR...")
+        log(.info, "Connecting to Seed ASR...")
 
         // Create URL
-        guard let url = URL(string: DoubaoConstants.apiURL) else {
+        guard let url = URL(string: ASRConstants.apiURL) else {
             throw ASRError.invalidURL
         }
 
@@ -257,12 +257,12 @@ actor DoubaoASRClient {
             await startReceivingMessages()
         }
 
-        log(.info, "Connected to Doubao ASR")
+        log(.info, "Connected to Seed ASR")
     }
 
     /// Disconnect from WebSocket
     func disconnect() async {
-        log(.info, "Disconnecting from Doubao ASR (isConnected=\(isConnected))...")
+        log(.info, "Disconnecting from Seed ASR (isConnected=\(isConnected))...")
 
         // Always execute cleanup, even if isConnected is already false
         // This ensures resources are released in all cases
@@ -278,7 +278,7 @@ actor DoubaoASRClient {
 
         sequence = 1
 
-        log(.info, "Disconnected from Doubao ASR")
+        log(.info, "Disconnected from Seed ASR")
     }
 
     // MARK: - Audio Streaming

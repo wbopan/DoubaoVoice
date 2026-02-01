@@ -1,6 +1,6 @@
 //
 //  FloatingWindow.swift
-//  DoubaoVoice
+//  Seedling
 //
 //  Floating transcription window with auto-start recording
 //

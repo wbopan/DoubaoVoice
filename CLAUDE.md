@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-DoubaoVoice is a macOS application for real-time speech-to-text transcription using the Doubao (豆包) ASR API. It features a native SwiftUI interface and implements the Doubao binary WebSocket protocol for streaming audio transcription.
+Seedling is a macOS application for real-time speech-to-text transcription using the Seed ASR API. It features a native SwiftUI interface and implements the Seed ASR binary WebSocket protocol for streaming audio transcription.
 
 ### Python Reference Implementation
 The `REFERENCE.py` file contains a daemon implementation with HTTP API. This is reference code showing the protocol implementation but is NOT the primary application.
@@ -18,11 +18,11 @@ The `REFERENCE.py` file contains a daemon implementation with HTTP API. This is 
 ## Project Structure
 
 ```
-DoubaoVoice/
-├── DoubaoVoiceApp.swift          # App entry point
+Seedling/
+├── SeedlingApp.swift             # App entry point
 ├── ContentView.swift             # Main UI
 ├── TranscriptionViewModel.swift  # View model coordinator
-├── DoubaoASRClient.swift         # WebSocket ASR client
+├── ASRClient.swift               # WebSocket ASR client
 ├── AudioRecorder.swift           # Audio capture
 └── Utilities.swift               # Models, constants, extensions
 ```
@@ -46,10 +46,10 @@ log(.debug, "Audio buffer size: \(bufferSize) bytes")
 import OSLog
 private let logger = Logger.asr
 
-logger.info("Connecting to Doubao ASR...")
+logger.info("Connecting to Seed ASR...")
 logger.debug("Payload compressed: \(size) bytes")
 ```
 
 ## Creating Worktrees
 
-To create an worktree, put the worktree in ./worktrees 
+To create an worktree, put the worktree in ./worktrees

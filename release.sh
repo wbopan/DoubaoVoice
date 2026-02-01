@@ -2,7 +2,7 @@
 
 set -e
 
-APP_NAME="DoubaoVoice"
+APP_NAME="Seedling"
 BUILD_DIR="./build"
 DEST="/Applications"
 

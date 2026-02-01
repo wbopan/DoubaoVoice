@@ -6,11 +6,11 @@ set -e
 ./build.sh
 
 echo ""
-echo "🚀 Running DoubaoVoice with logs..."
+echo "🚀 Running Seedling with logs..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
-APP_PATH="./build/Build/Products/Debug/DoubaoVoice.app"
+APP_PATH="./build/Build/Products/Debug/Seedling.app"
 
 # 运行应用并显示日志
-"$APP_PATH/Contents/MacOS/DoubaoVoice" 2>&1
+"$APP_PATH/Contents/MacOS/Seedling" 2>&1

@@ -1,6 +1,6 @@
 //
 //  AudioRecorder.swift
-//  DoubaoVoice
+//  Seedling
 //
 //  Audio capture service for real-time transcription
 //
@@ -27,8 +27,8 @@ actor AudioRecorder {
     // Target audio format: 16kHz, 16-bit, mono PCM
     private let targetFormat = AVAudioFormat(
         commonFormat: .pcmFormatInt16,
-        sampleRate: DoubaoConstants.sampleRate,
-        channels: DoubaoConstants.channels,
+        sampleRate: ASRConstants.sampleRate,
+        channels: ASRConstants.channels,
         interleaved: true
     )!
 
@@ -73,7 +73,7 @@ actor AudioRecorder {
         }
 
         // Install tap on input node
-        let bufferSize = AVAudioFrameCount(inputFormat.sampleRate * DoubaoConstants.segmentDuration)
+        let bufferSize = AVAudioFrameCount(inputFormat.sampleRate * ASRConstants.segmentDuration)
 
         // Create AsyncStream with backpressure control to prevent Task explosion
         // bufferingNewest(5) keeps only the latest 5 buffers, preventing memory buildup
@@ -200,16 +200,16 @@ actor AudioRecorder {
             }
         }
 
-        let data = Data(bytes: channelData[0], count: frameLength * DoubaoConstants.bytesPerSample)
+        let data = Data(bytes: channelData[0], count: frameLength * ASRConstants.bytesPerSample)
 
         // Add to segment buffer
         segmentBuffer.append(data)
 
         // Send complete segments
-        while segmentBuffer.count >= DoubaoConstants.segmentByteSize {
-            let segment = segmentBuffer.prefix(DoubaoConstants.segmentByteSize)
+        while segmentBuffer.count >= ASRConstants.segmentByteSize {
+            let segment = segmentBuffer.prefix(ASRConstants.segmentByteSize)
             audioCallback?(segment)
-            segmentBuffer.removeFirst(DoubaoConstants.segmentByteSize)
+            segmentBuffer.removeFirst(ASRConstants.segmentByteSize)
 
             log(.debug, "Sent audio segment: \(segment.count) bytes")
         }

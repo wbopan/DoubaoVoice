@@ -1,6 +1,6 @@
 //
 //  DocumentContentReader.swift
-//  DoubaoVoice
+//  Seedling
 //
 //  Reads text content from document files when Accessibility API cannot capture text
 //

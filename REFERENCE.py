@@ -9,21 +9,21 @@
 # ///
 #
 # =============================================================================
-# Doubao Voice - 豆包语音识别守护进程
+# Seedling - Seed ASR 语音识别参考实现
 # =============================================================================
 #
 # 这是一个持久化运行的守护进程，通过 HTTP API 提供语音识别服务。
 # 由 macOS launchd 管理，开机自启、崩溃自动重启。
 #
 # LaunchAgent 配置文件:
-#   ~/Library/LaunchAgents/com.panwenbo.doubaovoice.plist
+#   ~/Library/LaunchAgents/com.panwenbo.seedling.plist
 #
 # 管理命令:
-#   launchctl list | grep doubaovoice          # 查看状态
-#   launchctl unload ~/Library/LaunchAgents/com.panwenbo.doubaovoice.plist  # 停止
-#   launchctl load ~/Library/LaunchAgents/com.panwenbo.doubaovoice.plist    # 启动
+#   launchctl list | grep seedling          # 查看状态
+#   launchctl unload ~/Library/LaunchAgents/com.panwenbo.seedling.plist  # 停止
+#   launchctl load ~/Library/LaunchAgents/com.panwenbo.seedling.plist    # 启动
 #
-# HTTP API (端口 18888，可通过 DOUBAO_DAEMON_PORT 环境变量修改):
+# HTTP API (端口 18888，可通过 SEEDLING_DAEMON_PORT 环境变量修改):
 #   GET/POST /toggle  - 切换录音状态（推荐用这个）
 #   GET/POST /start   - 开始录音
 #   GET/POST /stop    - 停止录音并粘贴
@@ -33,9 +33,9 @@
 #   GET/POST /reload  - 热加载脚本（开发用）
 #
 # 日志文件:
-#   /tmp/doubaovoice.log          # 应用日志
-#   /tmp/doubaovoice.stdout.log   # 标准输出
-#   /tmp/doubaovoice.stderr.log   # 标准错误
+#   /tmp/seedling.log          # 应用日志
+#   /tmp/seedling.stdout.log   # 标准输出
+#   /tmp/seedling.stderr.log   # 标准错误
 #
 # =============================================================================
 

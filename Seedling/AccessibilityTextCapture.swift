@@ -1,6 +1,6 @@
 //
 //  AccessibilityTextCapture.swift
-//  DoubaoVoice
+//  Seedling
 //
 //  Captures text content from other applications using macOS Accessibility API
 //

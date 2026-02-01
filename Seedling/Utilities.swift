@@ -1,6 +1,6 @@
 //
 //  Utilities.swift
-//  DoubaoVoice
+//  Seedling
 //
 //  Core utilities, models, extensions, and constants
 //
@@ -14,7 +14,7 @@ import OSLog
 
 // MARK: - Constants
 
-enum DoubaoConstants: Sendable {
+enum ASRConstants: Sendable {
     static nonisolated let apiURL = "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async"
     static nonisolated let sampleRate: Double = 16000
     static nonisolated let channels: UInt32 = 1
@@ -43,11 +43,11 @@ struct ASRConfig: Sendable {
     init(
         appKey: String,
         accessKey: String,
-        resourceID: String = DoubaoConstants.resourceID,
+        resourceID: String = ASRConstants.resourceID,
         enableVAD: Bool = true,
         language: String = "zh-CN",
         format: String = "pcm",
-        sampleRate: Int = Int(DoubaoConstants.sampleRate),
+        sampleRate: Int = Int(ASRConstants.sampleRate),
         bits: Int = 16,
         contextLines: [String] = []
     ) {
@@ -98,7 +98,7 @@ struct ASRConfig: Sendable {
 
         return [
             "user": [
-                "uid": "doubaovoice_user"
+                "uid": "seedling_user"
             ],
             "audio": [
                 "format": "pcm",
@@ -447,7 +447,7 @@ enum LogLevel {
 
 /// Logger extensions with categorized loggers for different subsystems
 extension Logger {
-    private static nonisolated let subsystem = Bundle.main.bundleIdentifier ?? "com.doubaovoice"
+    private static nonisolated let subsystem = Bundle.main.bundleIdentifier ?? "com.wenbopan.seedling"
 
     /// Logger for audio recording and processing
     static nonisolated let audio = Logger(subsystem: subsystem, category: "Audio")
@@ -485,13 +485,13 @@ extension Logger {
 ///
 /// To view logs in Console.app:
 /// 1. Open Console.app
-/// 2. Filter by process: "DoubaoVoice"
-/// 3. Filter by subsystem: "com.doubaovoice"
+/// 2. Filter by process: "Seedling"
+/// 3. Filter by subsystem: "com.wenbopan.seedling"
 ///
 /// To view logs in terminal:
 /// ```bash
-/// log stream --predicate 'subsystem == "com.doubaovoice"'
-/// log stream --predicate 'subsystem == "com.doubaovoice" AND category == "ASR"'
+/// log stream --predicate 'subsystem == "com.wenbopan.seedling"'
+/// log stream --predicate 'subsystem == "com.wenbopan.seedling" AND category == "ASR"'
 /// ```
 nonisolated func log(_ level: LogLevel, _ message: String, file: String = #file, line: Int = #line) {
     let filename = (file as NSString).lastPathComponent
@@ -561,33 +561,33 @@ extension NSEvent.ModifierFlags {
 // MARK: - UserDefaults Keys
 
 enum UserDefaultsKeys {
-    static let appKey = "DoubaoVoice.AppKey"
-    static let accessKey = "DoubaoVoice.AccessKey"
-    static let resourceID = "DoubaoVoice.ResourceID"
-    static let httpPort = "DoubaoVoice.HTTPPort"
-    static let enableVAD = "DoubaoVoice.EnableVAD"
-    static let globalHotkeyKeyCode = "DoubaoVoice.GlobalHotkeyKeyCode"
-    static let globalHotkeyModifiers = "DoubaoVoice.GlobalHotkeyModifiers"
-    static let rememberWindowPosition = "DoubaoVoice.RememberWindowPosition"
-    static let windowPositionMode = "DoubaoVoice.WindowPositionMode"
-    static let windowPositionX = "DoubaoVoice.WindowPositionX"
-    static let windowPositionY = "DoubaoVoice.WindowPositionY"
-    static let finishHotkeyKeyCode = "DoubaoVoice.FinishHotkeyKeyCode"
-    static let finishHotkeyModifiers = "DoubaoVoice.FinishHotkeyModifiers"
-    static let autoPasteAfterClose = "DoubaoVoice.AutoPasteAfterClose"
-    static let removeTrailingPunctuation = "DoubaoVoice.RemoveTrailingPunctuation"
+    static let appKey = "Seedling.AppKey"
+    static let accessKey = "Seedling.AccessKey"
+    static let resourceID = "Seedling.ResourceID"
+    static let httpPort = "Seedling.HTTPPort"
+    static let enableVAD = "Seedling.EnableVAD"
+    static let globalHotkeyKeyCode = "Seedling.GlobalHotkeyKeyCode"
+    static let globalHotkeyModifiers = "Seedling.GlobalHotkeyModifiers"
+    static let rememberWindowPosition = "Seedling.RememberWindowPosition"
+    static let windowPositionMode = "Seedling.WindowPositionMode"
+    static let windowPositionX = "Seedling.WindowPositionX"
+    static let windowPositionY = "Seedling.WindowPositionY"
+    static let finishHotkeyKeyCode = "Seedling.FinishHotkeyKeyCode"
+    static let finishHotkeyModifiers = "Seedling.FinishHotkeyModifiers"
+    static let autoPasteAfterClose = "Seedling.AutoPasteAfterClose"
+    static let removeTrailingPunctuation = "Seedling.RemoveTrailingPunctuation"
 
     // Long-press modifier key settings
-    static let longPressEnabled = "DoubaoVoice.LongPressEnabled"
-    static let longPressModifierKey = "DoubaoVoice.LongPressModifierKey"
-    static let longPressMinDuration = "DoubaoVoice.LongPressMinDuration"
-    static let longPressAutoSubmit = "DoubaoVoice.LongPressAutoSubmit"
-    static let context = "DoubaoVoice.Context"
+    static let longPressEnabled = "Seedling.LongPressEnabled"
+    static let longPressModifierKey = "Seedling.LongPressModifierKey"
+    static let longPressMinDuration = "Seedling.LongPressMinDuration"
+    static let longPressAutoSubmit = "Seedling.LongPressAutoSubmit"
+    static let context = "Seedling.Context"
 
     // Context capture settings
-    static let contextCaptureEnabled = "DoubaoVoice.ContextCaptureEnabled"
-    static let autoCaptureOnActivate = "DoubaoVoice.AutoCaptureOnActivate"
-    static let maxContextLength = "DoubaoVoice.MaxContextLength"
+    static let contextCaptureEnabled = "Seedling.ContextCaptureEnabled"
+    static let autoCaptureOnActivate = "Seedling.AutoCaptureOnActivate"
+    static let maxContextLength = "Seedling.MaxContextLength"
 
     static let defaultPort = 18888
     static let defaultMaxContextLength = 2000
@@ -756,7 +756,7 @@ class AppSettings: ObservableObject {
     }
 
     var resourceID: String {
-        DoubaoConstants.resourceID
+        ASRConstants.resourceID
     }
 
     @Published var enableVAD: Bool {
