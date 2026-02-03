@@ -7,6 +7,7 @@
 
 import AVFoundation
 import Foundation
+import CoreAudio
 
 /// Audio recorder for capturing microphone input and streaming to ASR
 actor AudioRecorder {
@@ -35,9 +36,14 @@ actor AudioRecorder {
     // MARK: - Lifecycle
 
     /// Start recording audio
+    /// - Parameters:
+    ///   - callback: Called with audio data segments
+    ///   - levelCallback: Called with audio level for visualization
+    ///   - selectedMicrophoneUID: UID of the selected microphone (empty for system default)
     func startRecording(
         callback: @escaping (Data) -> Void,
-        levelCallback: ((Float) -> Void)? = nil
+        levelCallback: ((Float) -> Void)? = nil,
+        selectedMicrophoneUID: String = ""
     ) throws {
         guard !isRecording else {
             log(.warning, "Already recording")
@@ -53,6 +59,27 @@ actor AudioRecorder {
         // Create audio engine
         let engine = AVAudioEngine()
         self.audioEngine = engine
+
+        // Apply selected microphone device before accessing inputNode
+        if !selectedMicrophoneUID.isEmpty,
+           let deviceID = AudioDeviceManager.lookupDeviceID(forUID: selectedMicrophoneUID) {
+            var deviceIDVar = deviceID
+            let status = AudioUnitSetProperty(
+                engine.inputNode.audioUnit!,
+                kAudioOutputUnitProperty_CurrentDevice,
+                kAudioUnitScope_Global,
+                0,
+                &deviceIDVar,
+                UInt32(MemoryLayout<AudioDeviceID>.size)
+            )
+            if status == noErr {
+                log(.info, "Using microphone: \(selectedMicrophoneUID)")
+            } else {
+                log(.warning, "Failed to set microphone device (status: \(status)), using system default")
+            }
+        } else {
+            log(.info, "Using system default microphone")
+        }
 
         let inputNode = engine.inputNode
         let inputFormat = inputNode.outputFormat(forBus: 0)

@@ -243,7 +243,8 @@ class TranscriptionViewModel: ObservableObject {
                     },
                     levelCallback: { [weak self] level in
                         self?.updateAudioLevel(level)
-                    }
+                    },
+                    selectedMicrophoneUID: AppSettings.shared.selectedMicrophoneUID
                 )
 
                 // Mark that audio recording was actually started
