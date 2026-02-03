@@ -8,6 +8,7 @@
 import Cocoa
 import SwiftUI
 import OSLog
+import KeyboardShortcuts
 
 // MARK: - Floating Window Controller
 
@@ -455,8 +456,6 @@ class FloatingWindow: NSPanel {
     private func setupLocalEventMonitor() {
         removeLocalEventMonitor()
 
-        let finishConfig = AppSettings.shared.finishHotkey
-
         localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self = self else { return event }
 
@@ -468,18 +467,15 @@ class FloatingWindow: NSPanel {
                 return nil
             }
 
-            // Handle finish hotkey (only when recording and hotkey is set)
+            // Handle finish hotkey (only when recording)
             guard TranscriptionViewModel.shared.isRecording else {
                 return event
             }
 
-            // Skip if finish hotkey is unset
-            guard !finishConfig.isUnset else {
-                return event
-            }
-
-            if event.keyCode == UInt16(finishConfig.keyCode) &&
-               event.modifierFlags.carbonModifiers == finishConfig.modifiers {
+            // Check if event matches the finish shortcut
+            if let shortcut = KeyboardShortcuts.getShortcut(for: .finishRecording),
+               event.keyCode == UInt16(shortcut.key?.rawValue ?? -1),
+               event.modifierFlags.intersection(.deviceIndependentFlagsMask).subtracting(.capsLock) == shortcut.modifiers {
                 NotificationCenter.default.post(name: .finishRecordingRequested, object: nil)
                 return nil
             }
@@ -620,9 +616,7 @@ struct FloatingTranscriptionView: View {
                                     action: finishRecording
                                 )
                                 .glassEffectID("submit", in: buttonNamespace)
-                                .help(AppSettings.shared.finishHotkey.isUnset
-                                    ? "Finish and copy (no hotkey set)"
-                                    : "Finish and copy (\(AppSettings.shared.finishHotkey.displayString))")
+                                .help(finishHotkeyTooltip)
                                 .transition(.opacity)
                             }
                         }
@@ -717,6 +711,14 @@ struct FloatingTranscriptionView: View {
             context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
             window.animator().setFrame(newFrame, display: true)
         })
+    }
+
+    private var finishHotkeyTooltip: String {
+        if let shortcut = KeyboardShortcuts.getShortcut(for: .finishRecording) {
+            return "Finish and copy (\(shortcut.description))"
+        } else {
+            return "Finish and copy (no hotkey set)"
+        }
     }
 
     private func closeWindow() {

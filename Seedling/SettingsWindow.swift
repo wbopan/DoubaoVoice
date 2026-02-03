@@ -352,6 +352,7 @@ struct ContextCaptureSection: View {
 
 struct ControlsSettingsTab: View {
     @ObservedObject var settings: AppSettings
+    @ObservedObject private var deviceManager = AudioDeviceManager.shared
 
     var body: some View {
         Form {
@@ -360,6 +361,22 @@ struct ControlsSettingsTab: View {
             } header: {
                 Text("General")
                     .font(.headline)
+            }
+
+            Section {
+                Picker("Microphone:", selection: $settings.selectedMicrophoneUID) {
+                    Text("System Default").tag("")
+                    ForEach(deviceManager.inputDevices) { device in
+                        Text(device.name).tag(device.uid)
+                    }
+                }
+            } header: {
+                Text("Audio Input")
+                    .font(.headline)
+            } footer: {
+                Text("Select microphone for recording. Changes apply on next recording.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
 
             Section {
@@ -381,22 +398,16 @@ struct ControlsSettingsTab: View {
             Section {
                 HStack {
                     Text("Finish & Copy:")
-
+                        .fixedSize()
                     Spacer()
-
-                    HotkeyInputCapsule(
-                        hotkey: Binding(
-                            get: { settings.finishHotkey },
-                            set: { settings.finishHotkey = $0 }
-                        ),
-                        requireModifiers: false
-                    )
+                    KeyboardShortcuts.Recorder("", name: .finishRecording)
+                        .fixedSize()
                 }
             } header: {
                 Text("Window Hotkey")
                     .font(.headline)
             } footer: {
-                Text("Press this key to finish recording and copy text (only works when window is active)")
+                Text("Press this hotkey to finish recording and copy text (only works when window is active)")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -574,207 +585,6 @@ struct AboutTab: View {
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
-// MARK: - Hotkey Input Capsule
-
-struct HotkeyInputCapsule: View {
-    @Binding var hotkey: HotkeyConfig
-    var requireModifiers: Bool = true
-
-    @State private var isRecording = false
-    @State private var recordedKeyCode: UInt32?
-    @State private var recordedModifiers: UInt32 = 0
-    @State private var recordingViewID = UUID()
-
-    var body: some View {
-        // Display text (centered)
-        Group {
-            if isRecording {
-                Text(recordedDisplayString)
-                    .font(.system(.body, design: .monospaced))
-                    .tracking(1.5)
-                    .foregroundColor(.accentColor)
-                    .lineLimit(1)
-            } else {
-                Text(displayText)
-                    .font(.system(.body, design: .monospaced))
-                    .tracking(1.5)
-                    .foregroundColor(hotkey.isUnset ? .secondary : .primary)
-                    .lineLimit(1)
-            }
-        }
-        .frame(maxWidth: .infinity) // Center the text
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .frame(width: 130, alignment: .center) // 30% longer than 100
-        .background(.thickMaterial)
-        .cornerRadius(20)
-        .overlay(
-            RoundedRectangle(cornerRadius: 20)
-                .stroke(isRecording ? Color.accentColor : Color.clear, lineWidth: 2)
-        )
-        .contentShape(Rectangle())
-        .onTapGesture {
-            handleTap()
-        }
-        .background(
-            HotkeyRecorderBackgroundView(
-                isRecording: $isRecording,
-                recordedKeyCode: $recordedKeyCode,
-                recordedModifiers: $recordedModifiers,
-                requireModifiers: requireModifiers,
-                onRecorded: { keyCode, modifiers in
-                    hotkey = HotkeyConfig(keyCode: keyCode, modifiers: modifiers)
-                    isRecording = false
-                },
-                viewID: recordingViewID
-            )
-        )
-    }
-
-    private var displayText: String {
-        // Check if hotkey is "unset" (using a sentinel value or default)
-        // For now, we'll just display the current hotkey
-        return hotkey.displayString
-    }
-
-    private var recordedDisplayString: String {
-        guard let keyCode = recordedKeyCode else {
-            return "Listening..."
-        }
-
-        let tempHotkey = HotkeyConfig(keyCode: keyCode, modifiers: recordedModifiers)
-        return tempHotkey.displayString
-    }
-
-    private func handleTap() {
-        // If already recording, do nothing (let keyboard handler process)
-        if isRecording {
-            return
-        }
-
-        // If hotkey is set, clear it on first click
-        if !hotkey.isUnset {
-            hotkey = HotkeyConfig.unset
-        } else {
-            // If hotkey is not set, start recording on click
-            startRecording()
-        }
-    }
-
-    private func startRecording() {
-        isRecording = true
-        recordedKeyCode = nil
-        recordedModifiers = 0
-        // Force view ID change to recreate the background view and regain focus
-        recordingViewID = UUID()
-    }
-}
-
-// MARK: - Hotkey Recorder Background View
-
-struct HotkeyRecorderBackgroundView: NSViewRepresentable {
-    @Binding var isRecording: Bool
-    @Binding var recordedKeyCode: UInt32?
-    @Binding var recordedModifiers: UInt32
-    var requireModifiers: Bool
-    var onRecorded: (UInt32, UInt32) -> Void
-    var viewID: UUID
-
-    func makeNSView(context: Context) -> HotkeyRecorderBackgroundNSView {
-        let view = HotkeyRecorderBackgroundNSView()
-        view.requireModifiers = requireModifiers
-        view.onKeyPress = { keyCode, modifiers in
-            recordedKeyCode = keyCode
-            recordedModifiers = modifiers
-            onRecorded(keyCode, modifiers)
-        }
-        return view
-    }
-
-    func updateNSView(_ nsView: HotkeyRecorderBackgroundNSView, context: Context) {
-        nsView.isRecording = isRecording
-        nsView.requireModifiers = requireModifiers
-
-        // When recording starts, request focus
-        if isRecording {
-            DispatchQueue.main.async {
-                nsView.window?.makeFirstResponder(nsView)
-            }
-        }
-    }
-}
-
-// MARK: - Hotkey Recorder Background NSView
-
-class HotkeyRecorderBackgroundNSView: NSView {
-    var onKeyPress: ((UInt32, UInt32) -> Void)?
-    var isRecording = false {
-        didSet {
-            if isRecording {
-                // Request focus when recording starts
-                DispatchQueue.main.async { [weak self] in
-                    self?.window?.makeFirstResponder(self)
-                }
-            }
-        }
-    }
-    var requireModifiers = true
-
-    override var acceptsFirstResponder: Bool { true }
-
-    override func becomeFirstResponder() -> Bool {
-        return true
-    }
-
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        if window != nil && isRecording {
-            DispatchQueue.main.async { [weak self] in
-                self?.window?.makeFirstResponder(self)
-            }
-        }
-    }
-
-    override func keyDown(with event: NSEvent) {
-        guard isRecording else {
-            super.keyDown(with: event)
-            return
-        }
-
-        let keyCode = UInt32(event.keyCode)
-
-        // Escape key (keyCode 53) cancels recording
-        if keyCode == 53 {
-            // Don't call onKeyPress, just let recording be cancelled by not saving
-            return
-        }
-
-        let modifiers = event.modifierFlags.carbonModifiers
-
-        // For finish hotkey (Enter key), allow no modifiers (local scope)
-        // For global hotkeys, require at least one modifier
-        if requireModifiers && modifiers == 0 && keyCode != 36 {
-            NSSound.beep()
-            return
-        }
-
-        onKeyPress?(keyCode, modifiers)
-    }
-
-    override func flagsChanged(with event: NSEvent) {
-        // Don't call super to prevent default behavior
-    }
-
-    override func mouseDown(with event: NSEvent) {
-        // Capture mouse down to gain first responder status
-        if !isRecording {
-            super.mouseDown(with: event)
-        } else {
-            window?.makeFirstResponder(self)
-        }
     }
 }
 

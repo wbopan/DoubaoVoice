@@ -87,12 +87,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupHotkey() {
         // Migrate legacy settings on first run
         AppSettings.migrateHotkeyIfNeeded()
+        AppSettings.migrateFinishHotkeyIfNeeded()
 
         KeyboardShortcuts.onKeyUp(for: .toggleWindow) { [weak self] in
             Task { @MainActor in
                 self?.toggleWindow()
             }
         }
+
+        // Note: finishRecording shortcut is handled locally in FloatingWindow,
+        // not as a global shortcut. We only use KeyboardShortcuts.Recorder for the UI.
 
         log(.info, "Global hotkey registered via KeyboardShortcuts")
     }

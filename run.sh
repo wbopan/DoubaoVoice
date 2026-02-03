@@ -2,10 +2,6 @@
 
 set -e
 
-# 先构建
-./build.sh
-
-echo ""
 echo "🚀 Running Seedling with logs..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""

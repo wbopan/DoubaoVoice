@@ -585,6 +585,9 @@ enum UserDefaultsKeys {
     static let contextCaptureEnabled = "Seedling.ContextCaptureEnabled"
     static let maxContextLength = "Seedling.MaxContextLength"
 
+    // Microphone selection
+    static let selectedMicrophoneUID = "Seedling.SelectedMicrophoneUID"
+
     static let defaultPort = 18888
     static let defaultMaxContextLength = 2000
 }
@@ -807,6 +810,10 @@ class AppSettings: ObservableObject {
         didSet { defaults.set(maxContextLength, forKey: UserDefaultsKeys.maxContextLength) }
     }
 
+    @Published var selectedMicrophoneUID: String {
+        didSet { defaults.set(selectedMicrophoneUID, forKey: UserDefaultsKeys.selectedMicrophoneUID) }
+    }
+
     private init() {
         // Load saved values or use defaults (from reference.py credentials)
         self.appKey = defaults.string(forKey: UserDefaultsKeys.appKey) ?? "3254061168"
@@ -857,6 +864,9 @@ class AppSettings: ObservableObject {
         self.contextCaptureEnabled = defaults.object(forKey: UserDefaultsKeys.contextCaptureEnabled) as? Bool ?? true
         self.maxContextLength = defaults.object(forKey: UserDefaultsKeys.maxContextLength) as? Int ?? UserDefaultsKeys.defaultMaxContextLength
 
+        // Load microphone selection (empty string = system default)
+        self.selectedMicrophoneUID = defaults.string(forKey: UserDefaultsKeys.selectedMicrophoneUID) ?? ""
+
         // Migrate: Remove deprecated resourceID setting
         if defaults.object(forKey: UserDefaultsKeys.resourceID) != nil {
             defaults.removeObject(forKey: UserDefaultsKeys.resourceID)
@@ -899,6 +909,39 @@ class AppSettings: ObservableObject {
 
             KeyboardShortcuts.setShortcut(.init(key, modifiers: mods), for: .toggleWindow)
             log(.info, "Migrated legacy hotkey to KeyboardShortcuts")
+        }
+
+        defaults.set(true, forKey: migrationKey)
+    }
+
+    /// Migrate legacy finish hotkey settings to KeyboardShortcuts
+    static func migrateFinishHotkeyIfNeeded() {
+        let defaults = UserDefaults.standard
+        let migrationKey = "Seedling.FinishHotkeyMigrationCompleted"
+
+        guard !defaults.bool(forKey: migrationKey) else { return }
+
+        // Check if there's an existing finish hotkey setting
+        if let keyCode = defaults.object(forKey: UserDefaultsKeys.finishHotkeyKeyCode) as? UInt32,
+           let modifiers = defaults.object(forKey: UserDefaultsKeys.finishHotkeyModifiers) as? UInt32 {
+
+            // Skip if it's the "unset" value (keyCode 0 and modifiers 0)
+            if keyCode == 0 && modifiers == 0 {
+                // Clear any shortcut that might be set
+                KeyboardShortcuts.setShortcut(nil, for: .finishRecording)
+                log(.info, "Finish hotkey was unset, cleared KeyboardShortcuts binding")
+            } else {
+                let key = KeyboardShortcuts.Key(rawValue: Int(keyCode))
+
+                var mods: NSEvent.ModifierFlags = []
+                if modifiers & UInt32(cmdKey) != 0 { mods.insert(.command) }
+                if modifiers & UInt32(optionKey) != 0 { mods.insert(.option) }
+                if modifiers & UInt32(shiftKey) != 0 { mods.insert(.shift) }
+                if modifiers & UInt32(controlKey) != 0 { mods.insert(.control) }
+
+                KeyboardShortcuts.setShortcut(.init(key, modifiers: mods), for: .finishRecording)
+                log(.info, "Migrated legacy finish hotkey to KeyboardShortcuts (keyCode: \(keyCode))")
+            }
         }
 
         defaults.set(true, forKey: migrationKey)
