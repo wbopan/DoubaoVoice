@@ -12,7 +12,8 @@ The `REFERENCE.py` file contains a daemon implementation with HTTP API. This is 
 ## Build Commands
 
 ```bash
-./build.sh          # Build and see logs
+./build.sh          # Build (Debug) and see logs
+./release.sh        # Build (Release) and install to /Applications
 ```
 
 ## Project Structure

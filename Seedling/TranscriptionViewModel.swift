@@ -50,6 +50,10 @@ class TranscriptionViewModel: ObservableObject {
     private var currentConfig: ASRConfig?
     private var capturedContext: CapturedTextContext?
 
+    // Direct input mode (floating ball)
+    private(set) var directInputMode = false
+    private let keyboardInputSimulator = KeyboardInputSimulator()
+
     /// Computed property for backward compatibility
     var isRecording: Bool {
         recordingState == .recording || recordingState == .connecting
@@ -176,6 +180,7 @@ class TranscriptionViewModel: ObservableObject {
         errorMessage = nil
         statusMessage = "Connecting..."
         recordingStartTime = Date()
+        keyboardInputSimulator.reset()
 
         // Store Task reference for cancellation
         recordingTask = Task {
@@ -381,6 +386,34 @@ class TranscriptionViewModel: ObservableObject {
         return success
     }
 
+    /// Enable or disable direct input mode (floating ball)
+    func setDirectInputMode(_ enabled: Bool) {
+        directInputMode = enabled
+        if enabled {
+            keyboardInputSimulator.reset()
+            log(.info, "Direct input mode enabled")
+        } else {
+            log(.info, "Direct input mode disabled")
+        }
+    }
+
+    /// Finish recording in direct input mode (no clipboard, just ensure final text is typed)
+    func finishRecordingDirectInput() async {
+        guard recordingState == .recording || recordingState == .connecting else { return }
+
+        log(.info, "Finishing recording in direct input mode...")
+        statusMessage = "Finishing..."
+
+        stopRecording()
+
+        // Wait for stop task to complete (includes waiting for final result)
+        if let pendingStop = stopTask {
+            await pendingStop.value
+        }
+
+        log(.info, "Direct input recording finished")
+    }
+
     /// Toggle recording state
     func toggleRecording() {
         if isRecording {
@@ -454,6 +487,11 @@ class TranscriptionViewModel: ObservableObject {
 
                 // For both interim and final results, replace with the latest processed text
                 transcribedText = processedText
+
+                // In direct input mode, type text into the active application
+                if directInputMode {
+                    keyboardInputSimulator.applyText(processedText)
+                }
 
                 log(.debug, "Text updated: [\(processedText)] final:\(result.isLastPackage)")
             }

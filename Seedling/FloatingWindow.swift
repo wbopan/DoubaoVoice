@@ -20,7 +20,7 @@ class FloatingWindowController: NSWindowController {
     private var capturedContext: CapturedTextContext?
 
     /// Calculate window position based on the selected mode
-    private static func calculateWindowPosition(mode: WindowPositionMode, windowSize: NSSize, settings: AppSettings) -> NSPoint {
+    static func calculateWindowPosition(mode: WindowPositionMode, windowSize: NSSize, settings: AppSettings) -> NSPoint {
         log(.info, "Calculating window position for mode: \(mode.rawValue)")
 
         guard let screen = NSScreen.main else {
@@ -125,15 +125,6 @@ class FloatingWindowController: NSWindowController {
         // Make hosting view fully transparent for Liquid Glass to work properly
         hostingView.wantsLayer = true
         hostingView.layer?.backgroundColor = .clear
-
-        // Remove any default background from the hosting view's subviews
-        func clearBackgrounds(_ view: NSView) {
-            view.wantsLayer = true
-            view.layer?.backgroundColor = .clear
-            for subview in view.subviews {
-                clearBackgrounds(subview)
-            }
-        }
 
         window.contentView = hostingView
 
@@ -474,7 +465,8 @@ class FloatingWindow: NSPanel {
 
             // Check if event matches the finish shortcut
             if let shortcut = KeyboardShortcuts.getShortcut(for: .finishRecording),
-               event.keyCode == UInt16(shortcut.key?.rawValue ?? -1),
+               let key = shortcut.key,
+               event.keyCode == UInt16(key.rawValue),
                event.modifierFlags.intersection(.deviceIndependentFlagsMask).subtracting(.capsLock) == shortcut.modifiers {
                 NotificationCenter.default.post(name: .finishRecordingRequested, object: nil)
                 return nil
@@ -527,18 +519,19 @@ struct CircularGlassButton: View {
 
 struct WaveformView: View {
     let audioLevel: Float
+    var compact: Bool = false
     private let barCount = 5
 
     // Fixed random offsets for each bar to create organic variation
     private let barOffsets: [Float] = [0.7, 1.0, 0.85, 0.95, 0.75]
 
     var body: some View {
-        HStack(spacing: 3) {
+        HStack(spacing: compact ? 2 : 3) {
             ForEach(0..<barCount, id: \.self) { index in
-                WaveformBar(level: barLevel(for: index))
+                WaveformBar(level: barLevel(for: index), compact: compact)
             }
         }
-        .frame(height: 24)
+        .frame(height: compact ? 14 : 24)
     }
 
     private func barLevel(for index: Int) -> CGFloat {
@@ -550,11 +543,12 @@ struct WaveformView: View {
 
 struct WaveformBar: View {
     let level: CGFloat
+    var compact: Bool = false
 
     var body: some View {
-        RoundedRectangle(cornerRadius: 1.5)
+        RoundedRectangle(cornerRadius: compact ? 1 : 1.5)
             .fill(Color.primary.opacity(0.8))
-            .frame(width: 3, height: max(4, level * 20))
+            .frame(width: compact ? 2.5 : 3, height: max(compact ? 3 : 4, level * (compact ? 12 : 20)))
             .animation(.easeInOut(duration: 0.12), value: level)
     }
 }
@@ -652,7 +646,7 @@ struct FloatingTranscriptionView: View {
     }
 
     private func adjustWindowSize() {
-        guard let window = NSApp.keyWindow else { return }
+        guard let window = NSApp.windows.first(where: { $0 is FloatingWindow }) else { return }
 
         let text = viewModel.transcribedText
 

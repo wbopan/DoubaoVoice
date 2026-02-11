@@ -16,6 +16,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var statusItem: NSStatusItem!
     private var floatingWindowController: FloatingWindowController?
+    private var floatingBallController: FloatingBallWindowController?
     private var settingsWindowController: SettingsWindowController?
     private var modifierKeyMonitor: ModifierKeyMonitor?
     private let viewModel = TranscriptionViewModel.shared
@@ -49,6 +50,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             self,
             selector: #selector(handleLongPressConfigChanged),
             name: .longPressConfigChanged,
+            object: nil
+        )
+
+        // Observe floating window mode changes
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleWindowModeChanged),
+            name: .floatingWindowModeChanged,
             object: nil
         )
 
@@ -153,21 +162,39 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @MainActor
     private func handleDoubleTapHoldRelease() {
-        // Check if we have a visible window
-        guard let controller = floatingWindowController,
-              controller.window?.isVisible == true else {
-            log(.debug, "No visible window, ignoring release")
-            return
-        }
+        switch settings.floatingWindowMode {
+        case .fullWindow:
+            guard let controller = floatingWindowController,
+                  controller.window?.isVisible == true else {
+                log(.debug, "No visible window, ignoring release")
+                return
+            }
 
-        if viewModel.transcribedText.isEmpty {
-            // No text - just close the window
-            log(.info, "Double-tap-and-hold released with no text, closing window")
-            controller.hideWindow()
-        } else {
-            // Has text - trigger finish recording (submit and close)
-            log(.info, "Double-tap-and-hold released with text, triggering finish recording")
-            NotificationCenter.default.post(name: .finishRecordingRequested, object: nil)
+            if viewModel.transcribedText.isEmpty {
+                log(.info, "Double-tap-and-hold released with no text, closing window")
+                controller.hideWindow()
+            } else {
+                log(.info, "Double-tap-and-hold released with text, triggering finish recording")
+                NotificationCenter.default.post(name: .finishRecordingRequested, object: nil)
+            }
+
+        case .floatingBall:
+            guard let controller = floatingBallController,
+                  controller.window?.isVisible == true else {
+                log(.debug, "No visible ball, ignoring release")
+                return
+            }
+
+            controller.hideBall()
+        }
+    }
+
+    @objc private func handleWindowModeChanged() {
+        log(.info, "Floating window mode changed to \(settings.floatingWindowMode.rawValue)")
+        // Close any currently visible window/ball
+        Task { @MainActor in
+            floatingWindowController?.hideWindow()
+            floatingBallController?.hideBall()
         }
     }
 
@@ -175,23 +202,39 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @MainActor
     @objc private func showWindow() {
-        log(.debug, "showWindow() called")
-        if floatingWindowController == nil {
-            log(.debug, "Creating new FloatingWindowController")
-            floatingWindowController = FloatingWindowController()
-            log(.debug, "FloatingWindowController created: \(floatingWindowController != nil)")
+        switch settings.floatingWindowMode {
+        case .fullWindow:
+            log(.debug, "showWindow() in full window mode")
+            if floatingWindowController == nil {
+                floatingWindowController = FloatingWindowController()
+            }
+            floatingWindowController?.showWindow(nil)
+
+        case .floatingBall:
+            log(.debug, "showWindow() in floating ball mode")
+            if floatingBallController == nil {
+                floatingBallController = FloatingBallWindowController()
+            }
+            floatingBallController?.showBall()
         }
-        log(.debug, "Calling showWindow on controller")
-        floatingWindowController?.showWindow(nil)
-        log(.debug, "showWindow() completed")
     }
 
     @MainActor
     @objc private func toggleWindow() {
-        if let controller = floatingWindowController, controller.window?.isVisible == true {
-            controller.hideWindow()
-        } else {
-            showWindow()
+        switch settings.floatingWindowMode {
+        case .fullWindow:
+            if let controller = floatingWindowController, controller.window?.isVisible == true {
+                controller.hideWindow()
+            } else {
+                showWindow()
+            }
+
+        case .floatingBall:
+            if let controller = floatingBallController, controller.window?.isVisible == true {
+                controller.hideBall()
+            } else {
+                showWindow()
+            }
         }
     }
 
@@ -475,4 +518,5 @@ extension Notification.Name {
     static let recordingStateChanged = Notification.Name("recordingStateChanged")
     static let globalHotkeyChanged = Notification.Name("globalHotkeyChanged")
     static let longPressConfigChanged = Notification.Name("longPressConfigChanged")
+    static let floatingWindowModeChanged = Notification.Name("floatingWindowModeChanged")
 }

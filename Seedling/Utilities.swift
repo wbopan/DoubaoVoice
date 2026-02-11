@@ -83,15 +83,8 @@ struct ASRConfig: Sendable {
             if let contextData = try? JSONSerialization.data(withJSONObject: contextDict),
                let contextString = String(data: contextData, encoding: .utf8) {
                 request["corpus"] = ["context": contextString]
-                #if DEBUG
-                print("\u{001B}[32m[INFO]\u{001B}[0m ASR - Including dialog context: \(contextText)")
-                print("\u{001B}[36m[DEBUG]\u{001B}[0m ASR - Dialog corpus.context: \(contextString)")
-                #endif
+                log(.debug, "ASR: including dialog context (\(contextText.count) chars)")
             }
-        } else {
-            #if DEBUG
-            print("\u{001B}[36m[DEBUG]\u{001B}[0m ASR - No dialog context configured")
-            #endif
         }
 
         return [
@@ -144,6 +137,19 @@ struct RecordingSession {
     }
 }
 
+/// Floating window mode
+enum FloatingWindowMode: String, Codable, CaseIterable {
+    case fullWindow = "full_window"
+    case floatingBall = "floating_ball"
+
+    var displayName: String {
+        switch self {
+        case .fullWindow: return "Full Window"
+        case .floatingBall: return "Floating Ball"
+        }
+    }
+}
+
 /// Window position mode
 enum WindowPositionMode: String, Codable, CaseIterable {
     case rememberLast = "remember_last"
@@ -160,14 +166,6 @@ enum WindowPositionMode: String, Codable, CaseIterable {
         }
     }
 
-    var displayNameChinese: String {
-        switch self {
-        case .rememberLast: return "记忆上次的位置"
-        case .nearMouse: return "出现在鼠标的附近"
-        case .topCenter: return "屏幕的上方"
-        case .bottomCenter: return "屏幕的下方"
-        }
-    }
 }
 
 /// HTTP API response
@@ -545,6 +543,17 @@ extension String {
     }
 }
 
+// MARK: - NSView Helpers
+
+/// Recursively clear backgrounds on NSView hierarchy for Liquid Glass rendering
+func clearBackgrounds(_ view: NSView) {
+    view.wantsLayer = true
+    view.layer?.backgroundColor = .clear
+    for subview in view.subviews {
+        clearBackgrounds(subview)
+    }
+}
+
 extension NSEvent.ModifierFlags {
     /// Convert NSEvent.ModifierFlags to Carbon modifier bitmask
     var carbonModifiers: UInt32 {
@@ -576,7 +585,7 @@ enum UserDefaultsKeys {
     static let removeTrailingPunctuation = "Seedling.RemoveTrailingPunctuation"
 
     // Long-press modifier key settings
-    static let longPressEnabled = "Seedling.LongPressEnabled"
+    static let longPressConfig = "Seedling.LongPressEnabled" // stores full LongPressConfig JSON
     static let longPressModifierKey = "Seedling.LongPressModifierKey"
     static let longPressMinDuration = "Seedling.LongPressMinDuration"
     static let context = "Seedling.Context"
@@ -587,6 +596,11 @@ enum UserDefaultsKeys {
 
     // Microphone selection
     static let selectedMicrophoneUID = "Seedling.SelectedMicrophoneUID"
+
+    // Floating window mode
+    static let floatingWindowMode = "Seedling.FloatingWindowMode"
+    static let ballPositionX = "Seedling.BallPositionX"
+    static let ballPositionY = "Seedling.BallPositionY"
 
     static let defaultPort = 18888
     static let defaultMaxContextLength = 2000
@@ -675,67 +689,13 @@ struct HotkeyConfig: Codable, Equatable {
         keyCode == 0 && modifiers == 0
     }
 
-    var displayString: String {
-        guard !isUnset else { return "Not Set" }
-
-        // Build modifier symbols in standard order
-        let modifierSymbols: [(mask: UInt32, symbol: String)] = [
-            (UInt32(controlKey), "⌃"),
-            (UInt32(optionKey), "⌥"),
-            (UInt32(shiftKey), "⇧"),
-            (UInt32(cmdKey), "⌘")
-        ]
-
-        let parts = modifierSymbols
-            .filter { modifiers & $0.mask != 0 }
-            .map { $0.symbol }
-            + [keyCodeToString(keyCode)]
-
-        return parts.joined()
-    }
-
-    private func keyCodeToString(_ code: UInt32) -> String {
-        switch code {
-        case 0: return "A"
-        case 1: return "S"
-        case 2: return "D"
-        case 3: return "F"
-        case 4: return "H"
-        case 5: return "G"
-        case 6: return "Z"
-        case 7: return "X"
-        case 8: return "C"
-        case 9: return "V"
-        case 11: return "B"
-        case 12: return "Q"
-        case 13: return "W"
-        case 14: return "E"
-        case 15: return "R"
-        case 16: return "Y"
-        case 17: return "T"
-        case 31: return "O"
-        case 32: return "U"
-        case 34: return "I"
-        case 35: return "P"
-        case 37: return "L"
-        case 38: return "J"
-        case 40: return "K"
-        case 45: return "N"
-        case 46: return "M"
-        case 49: return "Space"
-        case 36: return "⏎"
-        case 51: return "⌫"
-        case 53: return "⎋"
-        default: return "[\(code)]"
-        }
-    }
 }
 
 // Carbon key modifier constants
-let controlKey: Int = 1 << 12
-let optionKey: Int = 1 << 11
-let shiftKey: Int = 1 << 9
-let cmdKey: Int = 1 << 8
+private let controlKey: Int = 1 << 12
+private let optionKey: Int = 1 << 11
+private let shiftKey: Int = 1 << 9
+private let cmdKey: Int = 1 << 8
 
 // MARK: - App Settings
 
@@ -791,7 +751,7 @@ class AppSettings: ObservableObject {
     @Published var longPressConfig: LongPressConfig {
         didSet {
             if let encoded = try? JSONEncoder().encode(longPressConfig) {
-                defaults.set(encoded, forKey: UserDefaultsKeys.longPressEnabled)
+                defaults.set(encoded, forKey: UserDefaultsKeys.longPressConfig)
             }
             // Notify that long-press config has changed
             NotificationCenter.default.post(name: .longPressConfigChanged, object: nil)
@@ -812,6 +772,15 @@ class AppSettings: ObservableObject {
 
     @Published var selectedMicrophoneUID: String {
         didSet { defaults.set(selectedMicrophoneUID, forKey: UserDefaultsKeys.selectedMicrophoneUID) }
+    }
+
+    @Published var floatingWindowMode: FloatingWindowMode {
+        didSet {
+            if let encoded = try? JSONEncoder().encode(floatingWindowMode) {
+                defaults.set(encoded, forKey: UserDefaultsKeys.floatingWindowMode)
+            }
+            NotificationCenter.default.post(name: .floatingWindowModeChanged, object: nil)
+        }
     }
 
     private init() {
@@ -850,7 +819,7 @@ class AppSettings: ObservableObject {
         self.removeTrailingPunctuation = defaults.object(forKey: UserDefaultsKeys.removeTrailingPunctuation) as? Bool ?? true
 
         // Load long-press config
-        if let configData = defaults.data(forKey: UserDefaultsKeys.longPressEnabled),
+        if let configData = defaults.data(forKey: UserDefaultsKeys.longPressConfig),
            let config = try? JSONDecoder().decode(LongPressConfig.self, from: configData) {
             self.longPressConfig = config
         } else {
@@ -866,6 +835,14 @@ class AppSettings: ObservableObject {
 
         // Load microphone selection (empty string = system default)
         self.selectedMicrophoneUID = defaults.string(forKey: UserDefaultsKeys.selectedMicrophoneUID) ?? ""
+
+        // Load floating window mode
+        if let modeData = defaults.data(forKey: UserDefaultsKeys.floatingWindowMode),
+           let mode = try? JSONDecoder().decode(FloatingWindowMode.self, from: modeData) {
+            self.floatingWindowMode = mode
+        } else {
+            self.floatingWindowMode = .fullWindow
+        }
 
         // Migrate: Remove deprecated resourceID setting
         if defaults.object(forKey: UserDefaultsKeys.resourceID) != nil {
@@ -887,6 +864,19 @@ class AppSettings: ObservableObject {
         guard windowPositionMode == .rememberLast else { return }
         defaults.set(position.x, forKey: UserDefaultsKeys.windowPositionX)
         defaults.set(position.y, forKey: UserDefaultsKeys.windowPositionY)
+    }
+
+    func getSavedBallPosition() -> NSPoint? {
+        guard let x = defaults.object(forKey: UserDefaultsKeys.ballPositionX) as? CGFloat,
+              let y = defaults.object(forKey: UserDefaultsKeys.ballPositionY) as? CGFloat else {
+            return nil
+        }
+        return NSPoint(x: x, y: y)
+    }
+
+    func saveBallPosition(_ position: NSPoint) {
+        defaults.set(position.x, forKey: UserDefaultsKeys.ballPositionX)
+        defaults.set(position.y, forKey: UserDefaultsKeys.ballPositionY)
     }
 
     /// Migrate legacy Carbon hotkey settings to KeyboardShortcuts

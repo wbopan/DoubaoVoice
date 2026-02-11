@@ -395,38 +395,55 @@ struct ControlsSettingsTab: View {
                     .foregroundColor(.secondary)
             }
 
-            Section {
-                HStack {
-                    Text("Finish & Copy:")
-                        .fixedSize()
-                    Spacer()
-                    KeyboardShortcuts.Recorder("", name: .finishRecording)
-                        .fixedSize()
+            if settings.floatingWindowMode == .fullWindow {
+                Section {
+                    HStack {
+                        Text("Finish & Copy:")
+                            .fixedSize()
+                        Spacer()
+                        KeyboardShortcuts.Recorder("", name: .finishRecording)
+                            .fixedSize()
+                    }
+                } header: {
+                    Text("Window Hotkey")
+                        .font(.headline)
+                } footer: {
+                    Text("Press this hotkey to finish recording and copy text (only works when window is active)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
-            } header: {
-                Text("Window Hotkey")
-                    .font(.headline)
-            } footer: {
-                Text("Press this hotkey to finish recording and copy text (only works when window is active)")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
             }
 
             DoubleTapHoldModifierSection(settings: settings)
 
-            Section {
-                Toggle("Auto-paste after finish", isOn: $settings.autoPasteAfterClose)
-                Toggle("Remove trailing punctuation", isOn: $settings.removeTrailingPunctuation)
-            } header: {
-                Text("Behavior")
-                    .font(.headline)
-            } footer: {
-                Text("Automatically paste transcribed text into the previous application when using the finish action. Remove trailing punctuation removes both full-width (。！？) and half-width (. ! ?) punctuation marks from the end of the transcribed text.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+            if settings.floatingWindowMode == .fullWindow {
+                Section {
+                    Toggle("Auto-paste after finish", isOn: $settings.autoPasteAfterClose)
+                    Toggle("Remove trailing punctuation", isOn: $settings.removeTrailingPunctuation)
+                } header: {
+                    Text("Behavior")
+                        .font(.headline)
+                } footer: {
+                    Text("Automatically paste transcribed text into the previous application when using the finish action. Remove trailing punctuation removes both full-width (。！？) and half-width (. ! ?) punctuation marks from the end of the transcribed text.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            } else {
+                Section {
+                    Toggle("Remove trailing punctuation", isOn: $settings.removeTrailingPunctuation)
+                } header: {
+                    Text("Behavior")
+                        .font(.headline)
+                }
             }
 
             Section {
+                Picker("Window mode:", selection: $settings.floatingWindowMode) {
+                    ForEach(FloatingWindowMode.allCases, id: \.self) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+
                 HStack {
                     Text("Window position:")
                         .frame(width: 120, alignment: .trailing)
@@ -445,7 +462,7 @@ struct ControlsSettingsTab: View {
                 Text("Window Appearance")
                     .font(.headline)
             } footer: {
-                Text("Choose where the transcription window appears: Remember Last Position keeps it where you last placed it, Near Mouse Cursor opens it near your cursor, Top/Bottom of Screen centers it at the screen edge.")
+                Text("Choose where the window or floating ball appears. Remember Last Position keeps it where you last placed it, Near Mouse Cursor opens it near your cursor, Top/Bottom of Screen centers it at the screen edge. You can also drag to reposition.")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
