@@ -518,12 +518,12 @@ struct CircularGlassButton: View {
 // MARK: - Waveform View
 
 struct WaveformView: View {
-    let audioLevel: Float
+    let audioLevels: [Float]
     var compact: Bool = false
     private let barCount = 5
 
-    // Fixed random offsets for each bar to create organic variation
-    private let barOffsets: [Float] = [0.7, 1.0, 0.85, 0.95, 0.75]
+    // Arc-shaped scale: bars inscribe a circle, center tallest, edges shortest
+    private let arcScale: [CGFloat] = [0.6, 0.92, 1.0, 0.92, 0.6]
 
     var body: some View {
         HStack(spacing: compact ? 2 : 3) {
@@ -531,13 +531,14 @@ struct WaveformView: View {
                 WaveformBar(level: barLevel(for: index), compact: compact)
             }
         }
-        .frame(height: compact ? 14 : 24)
+        .frame(height: compact ? 21 : 36)
     }
 
     private func barLevel(for index: Int) -> CGFloat {
-        let offset = barOffsets[index]
         let minHeight: CGFloat = 0.15
-        return max(minHeight, CGFloat(audioLevel) * CGFloat(offset))
+        let level = index < audioLevels.count ? audioLevels[index] : 0
+        let scale = index < arcScale.count ? arcScale[index] : 1.0
+        return max(minHeight * scale, CGFloat(level) * scale)
     }
 }
 
@@ -548,7 +549,7 @@ struct WaveformBar: View {
     var body: some View {
         RoundedRectangle(cornerRadius: compact ? 1 : 1.5)
             .fill(Color.primary.opacity(0.8))
-            .frame(width: compact ? 2.5 : 3, height: max(compact ? 3 : 4, level * (compact ? 12 : 20)))
+            .frame(width: compact ? 2.5 : 3, height: max(compact ? 3 : 4, level * (compact ? 18 : 30)))
             .animation(.easeInOut(duration: 0.12), value: level)
     }
 }
@@ -581,7 +582,7 @@ struct FloatingTranscriptionView: View {
             HStack {
                 // Waveform animation - only show when recording and connected
                 if viewModel.isRecording && !viewModel.isConnecting {
-                    WaveformView(audioLevel: viewModel.audioLevel)
+                    WaveformView(audioLevels: viewModel.audioLevels)
                         .padding(.leading, 20)
                         .transition(.opacity.combined(with: .scale(scale: 0.8)))
                 }

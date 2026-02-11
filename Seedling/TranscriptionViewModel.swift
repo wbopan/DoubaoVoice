@@ -23,7 +23,7 @@ class TranscriptionViewModel: ObservableObject {
     @Published var transcribedText = ""
     @Published var errorMessage: String?
     @Published var statusMessage = "Ready"
-    @Published var audioLevel: Float = 0.0
+    @Published var audioLevels: [Float] = [0, 0, 0, 0, 0]
     @Published var capturedContextText: String = ""  // For UI display (read-only)
     @Published var capturedContextSource: String = ""  // App name for display
 
@@ -246,8 +246,8 @@ class TranscriptionViewModel: ObservableObject {
                             await self?.sendAudioToASR(audioData)
                         }
                     },
-                    levelCallback: { [weak self] level in
-                        self?.updateAudioLevel(level)
+                    levelCallback: { [weak self] levels in
+                        self?.updateAudioLevels(levels)
                     },
                     selectedMicrophoneUID: AppSettings.shared.selectedMicrophoneUID
                 )
@@ -344,7 +344,7 @@ class TranscriptionViewModel: ObservableObject {
 
             recordingState = .idle
             audioActuallyStarted = false
-            audioLevel = 0.0
+            audioLevels = [0, 0, 0, 0, 0]
         }
     }
 
@@ -443,9 +443,11 @@ class TranscriptionViewModel: ObservableObject {
         audioActuallyStarted = false
     }
 
-    /// Update audio level with smoothing
-    private func updateAudioLevel(_ newLevel: Float) {
-        audioLevel = levelSmoothingFactor * newLevel + (1 - levelSmoothingFactor) * audioLevel
+    /// Update audio levels with per-band smoothing
+    private func updateAudioLevels(_ newLevels: [Float]) {
+        for i in 0..<min(newLevels.count, audioLevels.count) {
+            audioLevels[i] = levelSmoothingFactor * newLevels[i] + (1 - levelSmoothingFactor) * audioLevels[i]
+        }
     }
 
     /// Send audio data to ASR service

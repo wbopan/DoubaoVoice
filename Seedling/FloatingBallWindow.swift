@@ -263,7 +263,7 @@ struct FloatingBallView: View {
                     .controlSize(.small)
                     .frame(width: 36, height: 36)
             } else if viewModel.isRecording {
-                WaveformView(audioLevel: viewModel.audioLevel, compact: true)
+                WaveformView(audioLevels: viewModel.audioLevels, compact: true)
                     .foregroundStyle(.primary)
             }
         }
