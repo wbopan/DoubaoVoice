@@ -602,7 +602,7 @@ struct FloatingTranscriptionView: View {
                                 action: closeWindow
                             )
                             .glassEffectID("close", in: buttonNamespace)
-                            .help("Hide window (ESC)")
+                            .help("Close (ESC)")
 
                             if viewModel.isRecording && !viewModel.transcribedText.isEmpty {
                                 CircularGlassButton(
@@ -710,9 +710,9 @@ struct FloatingTranscriptionView: View {
 
     private var finishHotkeyTooltip: String {
         if let shortcut = KeyboardShortcuts.getShortcut(for: .finishRecording) {
-            return "Finish and copy (\(shortcut.description))"
+            return "Done (\(shortcut.description))"
         } else {
-            return "Finish and copy (no hotkey set)"
+            return "Done (no shortcut set)"
         }
     }
 

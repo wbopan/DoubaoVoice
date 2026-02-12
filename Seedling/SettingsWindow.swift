@@ -61,9 +61,9 @@ struct SettingsView: View {
                         Label("API", systemImage: "key.fill")
                     }
 
-                DictationSettingsTab(context: $tempContext)
+                ContextSettingsTab(context: $tempContext)
                     .tabItem {
-                        Label("Dictation", systemImage: "text.bubble")
+                        Label("Context", systemImage: "text.bubble")
                     }
 
                 ControlsSettingsTab(settings: settings)
@@ -183,9 +183,9 @@ struct APISettingsTab: View {
     }
 }
 
-// MARK: - Dictation Settings Tab
+// MARK: - Context Settings Tab
 
-struct DictationSettingsTab: View {
+struct ContextSettingsTab: View {
     @Binding var context: String
     @ObservedObject private var settings = AppSettings.shared
 
@@ -297,7 +297,7 @@ struct ContextCaptureSection: View {
                     }
 
                     if viewModel.capturedContextText.isEmpty {
-                        Text("No context captured yet. Use the hotkey to activate and capture context from another app.")
+                        Text("No context captured yet. Use the shortcut to activate and capture context from another app.")
                             .font(.caption)
                             .foregroundColor(.secondary)
                             .italic()
@@ -328,7 +328,7 @@ struct ContextCaptureSection: View {
             Text("Auto Context Capture")
                 .font(.headline)
         } footer: {
-            Text("When enabled, text from the previous application is captured on each hotkey activation and appended after your user context (up to the max length limit).")
+            Text("When enabled, text from the previous application is captured on each activation and appended after your user context (up to the max length limit).")
                 .font(.caption)
                 .foregroundColor(.secondary)
         }
@@ -371,26 +371,26 @@ struct ControlsSettingsTab: View {
                     }
                 }
             } header: {
-                Text("Audio Input")
+                Text("Microphone")
                     .font(.headline)
             } footer: {
-                Text("Select microphone for recording. Changes apply on next recording.")
+                Text("Changes take effect on next recording.")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
 
             Section {
                 HStack {
-                    Text("Hotkey:")
+                    Text("Shortcut:")
                     Spacer()
                     KeyboardShortcuts.Recorder("", name: .toggleWindow)
                         .fixedSize()
                 }
             } header: {
-                Text("Global Hotkey")
+                Text("Global Shortcut")
                     .font(.headline)
             } footer: {
-                Text("Press the hotkey to show/hide the transcription window")
+                Text("Show or hide the transcription window")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -398,23 +398,23 @@ struct ControlsSettingsTab: View {
             if settings.floatingWindowMode == .fullWindow {
                 Section {
                     HStack {
-                        Text("Finish & Copy:")
+                        Text("Done:")
                             .fixedSize()
                         Spacer()
                         KeyboardShortcuts.Recorder("", name: .finishRecording)
                             .fixedSize()
                     }
                 } header: {
-                    Text("Window Hotkey")
+                    Text("Window Shortcut")
                         .font(.headline)
                 } footer: {
-                    Text("Press this hotkey to finish recording and copy text (only works when window is active)")
+                    Text("Finish dictation and copy text to clipboard. Only works when the window is focused.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
             }
 
-            DoubleTapHoldModifierSection(settings: settings)
+            PushToTalkSection(settings: settings)
 
             if settings.floatingWindowMode == .fullWindow {
                 Section {
@@ -459,10 +459,10 @@ struct ControlsSettingsTab: View {
                     Spacer()
                 }
             } header: {
-                Text("Window Appearance")
+                Text("Appearance")
                     .font(.headline)
             } footer: {
-                Text("Choose where the window or floating ball appears. Remember Last Position keeps it where you last placed it, Near Mouse Cursor opens it near your cursor, Top/Bottom of Screen centers it at the screen edge. You can also drag to reposition.")
+                Text("Choose where the window appears. You can also drag to reposition.")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -472,15 +472,15 @@ struct ControlsSettingsTab: View {
     }
 }
 
-// MARK: - Double-Tap-and-Hold Modifier Section
+// MARK: - Push to Talk Section
 
-struct DoubleTapHoldModifierSection: View {
+struct PushToTalkSection: View {
     @ObservedObject var settings: AppSettings
     @State private var hasAccessibilityPermission = false
 
     var body: some View {
         Section {
-            Toggle("Enable double-tap-and-hold", isOn: configBinding(\.enabled, onSet: { newValue in
+            Toggle("Enable Push to Talk", isOn: configBinding(\.enabled, onSet: { newValue in
                 if newValue {
                     _ = ModifierKeyMonitor.checkAccessibilityPermission(prompt: true)
                     updateAccessibilityStatus()
@@ -535,10 +535,10 @@ struct DoubleTapHoldModifierSection: View {
                 }
             }
         } header: {
-            Text("Double-Tap-and-Hold")
+            Text("Push to Talk")
                 .font(.headline)
         } footer: {
-            Text("Double-tap the modifier key and hold on the second tap to start recording. Release to finish and auto-paste. This feature requires Accessibility permission.")
+            Text("Double-tap a modifier key and hold to start dictation. Release to finish and auto-paste. Requires Accessibility permission.")
                 .font(.caption)
                 .foregroundColor(.secondary)
         }

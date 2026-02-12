@@ -204,7 +204,7 @@ class TranscriptionViewModel: ObservableObject {
 
                 // Ensure we have a valid config
                 guard let config = currentConfig else {
-                    errorMessage = "ASR configuration not set. Please check Settings."
+                    errorMessage = "API credentials not configured. Open Settings to add them."
                     await performCleanup()
                     recordingState = .idle
                     return
@@ -377,7 +377,7 @@ class TranscriptionViewModel: ObservableObject {
 
         if success {
             log(.info, "Transcribed text copied to clipboard (\(transcribedText.count) chars)")
-            statusMessage = "Copied to clipboard"
+            statusMessage = "Copied"
         } else {
             log(.error, "Failed to copy text to clipboard")
             errorMessage = "Failed to copy to clipboard"

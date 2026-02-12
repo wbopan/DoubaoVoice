@@ -144,8 +144,8 @@ enum FloatingWindowMode: String, Codable, CaseIterable {
 
     var displayName: String {
         switch self {
-        case .fullWindow: return "Full Window"
-        case .floatingBall: return "Floating Ball"
+        case .fullWindow: return "Full Mode"
+        case .floatingBall: return "Mini Mode"
         }
     }
 }

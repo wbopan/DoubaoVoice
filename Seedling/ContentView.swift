@@ -33,7 +33,7 @@ struct ContentView: View {
                 ScrollViewReader { proxy in
                     VStack(alignment: .leading) {
                         if viewModel.transcribedText.isEmpty && !viewModel.isRecording {
-                            Text("Transcribed text will appear here...")
+                            Text("Start speaking to see your text here...")
                                 .foregroundColor(.secondary)
                                 .italic()
                         } else {
@@ -73,7 +73,7 @@ struct ContentView: View {
                     Image(systemName: viewModel.isRecording ? "stop.circle.fill" : "mic.circle.fill")
                         .font(.title)
 
-                    Text(viewModel.isRecording ? "Stop Recording" : "Start Recording")
+                    Text(viewModel.isRecording ? "Stop Dictation" : "Start Dictation")
                         .font(.headline)
                 }
                 .foregroundColor(.white)
