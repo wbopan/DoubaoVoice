@@ -28,7 +28,7 @@ class FloatingBallPanel: NSPanel {
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         backgroundColor = .clear
         isOpaque = false
-        hasShadow = true
+        hasShadow = false
         hidesOnDeactivate = false
         isMovableByWindowBackground = false
     }
@@ -67,8 +67,10 @@ class FloatingBallWindowController: NSWindowController {
 
     convenience init() {
         let ballSize: CGFloat = 36
+        let glowPadding: CGFloat = 30
+        let windowSize = ballSize + glowPadding * 2
         let panel = FloatingBallPanel(
-            contentRect: NSRect(x: 0, y: 0, width: ballSize, height: ballSize),
+            contentRect: NSRect(x: 0, y: 0, width: windowSize, height: windowSize),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -130,10 +132,10 @@ class FloatingBallWindowController: NSWindowController {
         // Reposition based on WindowPositionMode (except rememberLast)
         let mode = settings.windowPositionMode
         if mode != .rememberLast {
-            let ballSize: CGFloat = 36
+            let windowSize: CGFloat = 36 + 30 * 2
             let position = FloatingWindowController.calculateWindowPosition(
                 mode: mode,
-                windowSize: NSSize(width: ballSize, height: ballSize),
+                windowSize: NSSize(width: windowSize, height: windowSize),
                 settings: settings
             )
             panel.setFrameOrigin(position)
@@ -148,7 +150,7 @@ class FloatingBallWindowController: NSWindowController {
         panel.alphaValue = 0
         panel.orderFrontRegardless()
         NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.2
+            context.duration = 0.5
             panel.animator().alphaValue = 1
         }
 
@@ -214,7 +216,7 @@ class FloatingBallWindowController: NSWindowController {
         guard let panel = window else { return }
         await withCheckedContinuation { continuation in
             NSAnimationContext.runAnimationGroup({ context in
-                context.duration = 0.2
+                context.duration = 0.5
                 panel.animator().alphaValue = 0
             }, completionHandler: {
                 panel.orderOut(nil)
@@ -257,19 +259,29 @@ struct FloatingBallView: View {
 
     var body: some View {
         ZStack {
-            // State-based content
-            if viewModel.isConnecting || viewModel.isProcessing {
-                ProgressView()
-                    .controlSize(.small)
-                    .frame(width: 36, height: 36)
-            } else if viewModel.isRecording {
-                WaveformView(audioLevels: viewModel.audioLevels, compact: true)
-                    .foregroundStyle(.primary)
+            // Ambient glow (rendered as content to avoid NSHostingView clipping)
+            Circle()
+                .fill(Color.accentColor.opacity(0.3))
+                .frame(width: 44, height: 44)
+                .blur(radius: 6)
+
+            // Ball content with tinted liquid glass
+            ZStack {
+                if viewModel.isConnecting || viewModel.isProcessing {
+                    ProgressView()
+                        .controlSize(.small)
+                        .frame(width: 36, height: 36)
+                } else if viewModel.isRecording {
+                    WaveformView(audioLevels: viewModel.audioLevels, compact: true)
+                        .foregroundStyle(.primary)
+                }
             }
+            .frame(width: 36, height: 36)
+            .environment(\.colorScheme, .dark)
+            .background(Circle().fill(Color.accentColor))
+            .clipShape(Circle())
         }
-        .frame(width: 36, height: 36)
-        .glassEffect(.regular, in: .circle)
-        .clipShape(Circle())
+        .frame(width: 96, height: 96)
     }
 
 }
