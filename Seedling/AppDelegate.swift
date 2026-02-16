@@ -34,7 +34,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Setup global hotkey
         setupHotkey()
 
-        // Setup double-tap-and-hold modifier key monitor
+        // Setup Push to Talk modifier key monitor
         setupDoubleTapHoldMonitor()
 
         // Observe hotkey changes
@@ -115,7 +115,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         log(.info, "Global hotkey setting changed")
     }
 
-    // MARK: - Double-Tap-and-Hold Modifier Key Setup
+    // MARK: - Push to Talk Modifier Key Setup
 
     private func setupDoubleTapHoldMonitor() {
         // Stop existing monitor if any
@@ -124,15 +124,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         let config = settings.longPressConfig
         guard config.enabled else {
-            log(.info, "Double-tap-and-hold modifier key is disabled")
+            log(.info, "Push to Talk is disabled")
             return
         }
 
-        log(.info, "Setting up double-tap-and-hold monitor for \(config.modifierKey.displayName) key")
+        log(.info, "Setting up Push to Talk monitor for \(config.modifierKey.displayName) key (requireDoubleTap: \(config.requireDoubleTap))")
 
         modifierKeyMonitor = ModifierKeyMonitor(
             modifierKey: config.modifierKey,
             minimumDuration: config.minimumPressDuration,
+            requireDoubleTap: config.requireDoubleTap,
             onActivate: { [weak self] in
                 Task { @MainActor in
                     self?.handleDoubleTapHoldActivate()
@@ -146,17 +147,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         modifierKeyMonitor?.start()
-        log(.info, "Double-tap-and-hold monitor started for \(config.modifierKey.symbol) key")
+        log(.info, "Push to Talk monitor started for \(config.modifierKey.symbol) key")
     }
 
     @objc private func handleLongPressConfigChanged() {
-        log(.info, "Double-tap-and-hold config changed, updating monitor...")
+        log(.info, "Push to Talk config changed, updating monitor...")
         setupDoubleTapHoldMonitor()
     }
 
     @MainActor
     private func handleDoubleTapHoldActivate() {
-        log(.info, "Double-tap-and-hold activated, showing window and starting recording")
+        log(.info, "Push to Talk activated, showing window and starting recording")
         showWindow()
     }
 
@@ -171,10 +172,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
             if viewModel.transcribedText.isEmpty {
-                log(.info, "Double-tap-and-hold released with no text, closing window")
+                log(.info, "Push to Talk released with no text, closing window")
                 controller.hideWindow()
             } else {
-                log(.info, "Double-tap-and-hold released with text, triggering finish recording")
+                log(.info, "Push to Talk released with text, triggering finish recording")
                 NotificationCenter.default.post(name: .finishRecordingRequested, object: nil)
             }
 
@@ -254,11 +255,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
 // MARK: - Modifier Key Monitor
 
-/// Monitors global modifier key press/release events for double-tap-and-hold activation
-/// Requires Accessibility permission to work
+/// Monitors global modifier key press/release events for Push to Talk activation.
+/// Requires Accessibility permission to work.
 ///
-/// State machine:
-/// idle → firstPressDown → waitingForSecondPress → secondPressHeld → activated
+/// When requireDoubleTap is true:
+///   idle → firstPressDown → waitingForSecondPress → secondPressHeld → activated
+/// When requireDoubleTap is false:
+///   idle → secondPressHeld → activated
 class ModifierKeyMonitor {
     // MARK: - State Machine
 
@@ -284,6 +287,7 @@ class ModifierKeyMonitor {
 
     private let modifierKey: LongPressModifierKey
     private let minimumDuration: TimeInterval  // Time to hold on second press before activation
+    private let requireDoubleTap: Bool
     private let onActivate: () -> Void
     private let onRelease: () -> Void
 
@@ -305,10 +309,12 @@ class ModifierKeyMonitor {
 
     init(modifierKey: LongPressModifierKey,
          minimumDuration: TimeInterval,
+         requireDoubleTap: Bool = false,
          onActivate: @escaping () -> Void,
          onRelease: @escaping () -> Void) {
         self.modifierKey = modifierKey
         self.minimumDuration = minimumDuration
+        self.requireDoubleTap = requireDoubleTap
         self.onActivate = onActivate
         self.onRelease = onRelease
     }
@@ -320,7 +326,7 @@ class ModifierKeyMonitor {
     func start() {
         stop() // Ensure no duplicate monitors
 
-        logger.info("Starting modifier key monitor for \(self.modifierKey.displayName) (double-tap-and-hold)")
+        logger.info("Starting modifier key monitor for \(self.modifierKey.displayName) (requireDoubleTap: \(self.requireDoubleTap))")
 
         // Global monitor - captures events sent to OTHER applications
         globalEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
@@ -394,10 +400,21 @@ class ModifierKeyMonitor {
         switch state {
         case .idle:
             if isTargetPressed {
-                // First press detected
-                logger.debug("[\(source)] First press detected")
-                state = .firstPressDown
-                firstPressTime = Date()
+                if requireDoubleTap {
+                    // First press detected — wait for double-tap sequence
+                    logger.debug("[\(source)] First press detected")
+                    state = .firstPressDown
+                    firstPressTime = Date()
+                } else {
+                    // Simple hold mode — jump directly to hold detection
+                    logger.debug("[\(source)] Press detected, waiting for hold")
+                    state = .secondPressHeld
+                    secondPressTime = Date()
+
+                    DispatchQueue.main.asyncAfter(deadline: .now() + minimumDuration) { [weak self] in
+                        self?.checkActivation()
+                    }
+                }
             }
 
         case .firstPressDown:
@@ -471,7 +488,7 @@ class ModifierKeyMonitor {
         case .activated:
             if !isTargetPressed {
                 // Released after activation - trigger release callback
-                logger.info("[\(source)] Double-tap-and-hold release detected, triggering callback")
+                logger.info("[\(source)] Push to Talk release detected, triggering callback")
                 onRelease()
                 resetState()
             }
@@ -495,7 +512,7 @@ class ModifierKeyMonitor {
         }
 
         // Activate
-        logger.info("Double-tap-and-hold threshold reached, activating")
+        logger.info("Push to Talk hold threshold reached, activating")
         state = .activated
         onActivate()
     }

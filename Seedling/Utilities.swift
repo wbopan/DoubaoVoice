@@ -653,11 +653,13 @@ struct LongPressConfig: Codable, Equatable {
     var enabled: Bool
     var modifierKey: LongPressModifierKey
     var minimumPressDuration: TimeInterval
+    var requireDoubleTap: Bool
 
     static let `default` = LongPressConfig(
         enabled: true,
         modifierKey: .shift,
-        minimumPressDuration: 0.15
+        minimumPressDuration: 0.15,
+        requireDoubleTap: false
     )
 }
 

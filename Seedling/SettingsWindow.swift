@@ -382,6 +382,7 @@ struct ControlsSettingsTab: View {
             Section {
                 HStack {
                     Text("Shortcut:")
+                        .fixedSize()
                     Spacer()
                     KeyboardShortcuts.Recorder("", name: .toggleWindow)
                         .fixedSize()
@@ -404,6 +405,7 @@ struct ControlsSettingsTab: View {
                         KeyboardShortcuts.Recorder("", name: .finishRecording)
                             .fixedSize()
                     }
+                    .fixedSize(horizontal: false, vertical: true)
                 } header: {
                     Text("Window Shortcut")
                         .font(.headline)
@@ -444,27 +446,14 @@ struct ControlsSettingsTab: View {
                     }
                 }
 
-                HStack {
-                    Text("Window position:")
-                        .frame(width: 120, alignment: .trailing)
-
-                    Picker("", selection: $settings.windowPositionMode) {
-                        ForEach(WindowPositionMode.allCases, id: \.self) { mode in
-                            Text(mode.displayName).tag(mode)
-                        }
+                Picker("Window position:", selection: $settings.windowPositionMode) {
+                    ForEach(WindowPositionMode.allCases, id: \.self) { mode in
+                        Text(mode.displayName).tag(mode)
                     }
-                    .labelsHidden()
-                    .frame(width: 200)
-
-                    Spacer()
                 }
             } header: {
                 Text("Appearance")
                     .font(.headline)
-            } footer: {
-                Text("Choose where the window appears. You can also drag to reposition.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
             }
         }
         .formStyle(.grouped)
@@ -506,18 +495,10 @@ struct PushToTalkSection: View {
                     }
                 }
 
-                HStack {
-                    Text("Modifier key:")
-
-                    Spacer()
-
-                    Picker("", selection: configBinding(\.modifierKey)) {
-                        ForEach(LongPressModifierKey.allCases, id: \.self) { key in
-                            Text("\(key.symbol) \(key.displayName)").tag(key)
-                        }
+                Picker("Modifier key:", selection: configBinding(\.modifierKey)) {
+                    ForEach(LongPressModifierKey.allCases, id: \.self) { key in
+                        Text("\(key.symbol) \(key.displayName)").tag(key)
                     }
-                    .labelsHidden()
-                    .frame(width: 150)
                 }
 
                 HStack {
@@ -533,12 +514,14 @@ struct PushToTalkSection: View {
                         .frame(width: 40)
                         .monospacedDigit()
                 }
+
+                Toggle("Require double-tap", isOn: configBinding(\.requireDoubleTap))
             }
         } header: {
             Text("Push to Talk")
                 .font(.headline)
         } footer: {
-            Text("Double-tap a modifier key and hold to start dictation. Release to finish and auto-paste. Requires Accessibility permission.")
+            Text("Hold a modifier key to start dictation. Release to finish and auto-paste. When double-tap is required, tap the key once first, then hold. Requires Accessibility permission.")
                 .font(.caption)
                 .foregroundColor(.secondary)
         }
