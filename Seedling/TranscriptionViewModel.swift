@@ -43,6 +43,10 @@ class TranscriptionViewModel: ObservableObject {
     private var recordingTask: Task<Void, Never>?
     private var stopTask: Task<Void, Never>?
     private var audioActuallyStarted = false  // Track if audio recording was actually started
+    private var preConnectionAudioBuffer: [Data] = []
+    private var preConnectionBufferSize = 0  // Track total bytes for cap enforcement
+    private var isASRConnected = false
+    private let maxBufferBytes = Int(ASRConstants.sampleRate) * ASRConstants.bytesPerSample * 5
 
     private let audioRecorder = AudioRecorder()
     private let asrClient = ASRClient()
@@ -216,6 +220,28 @@ class TranscriptionViewModel: ObservableObject {
 
                 log(.info, "Starting transcription session...")
 
+                // Reset buffer state
+                isASRConnected = false
+                preConnectionAudioBuffer.removeAll()
+                preConnectionBufferSize = 0
+
+                // Start audio recording FIRST (callback will buffer via sendAudioToASR)
+                try await audioRecorder.startRecording(
+                    callback: { [weak self] audioData in
+                        Task {
+                            await self?.sendAudioToASR(audioData)
+                        }
+                    },
+                    levelCallback: { [weak self] levels in
+                        self?.updateAudioLevels(levels)
+                    },
+                    selectedMicrophoneUID: AppSettings.shared.selectedMicrophoneUID
+                )
+
+                // Mark that audio recording was actually started
+                audioActuallyStarted = true
+                statusMessage = "Connecting..."
+
                 // Check for cancellation before connecting
                 try Task.checkCancellation()
 
@@ -231,33 +257,18 @@ class TranscriptionViewModel: ObservableObject {
                     await listenToASRResults()
                 }
 
-                // Check for cancellation before starting audio
-                try Task.checkCancellation()
+                // Mark connected and flush buffered audio
+                isASRConnected = true
+                await flushAudioBuffer()
 
-                // Start audio recording
-                try await audioRecorder.startRecording(
-                    callback: { [weak self] audioData in
-                        Task {
-                            await self?.sendAudioToASR(audioData)
-                        }
-                    },
-                    levelCallback: { [weak self] levels in
-                        self?.updateAudioLevels(levels)
-                    },
-                    selectedMicrophoneUID: AppSettings.shared.selectedMicrophoneUID
-                )
-
-                // Mark that audio recording was actually started
-                audioActuallyStarted = true
-
-                // Check state after audio setup - stopRecording() may have been called
-                // during the actor hop to AudioRecorder, changing state to .stopping
+                // Check state after flush - stopRecording() may have been called
+                // during the flush, changing state to .stopping
                 guard recordingState == .connecting else {
-                    log(.info, "State changed during audio setup (\(recordingState)), stopTask will handle cleanup")
+                    log(.info, "State changed during setup (\(recordingState)), stopTask will handle cleanup")
                     return
                 }
 
-                // Only set .recording after audio actually starts
+                // Only set .recording after audio and ASR are both ready
                 recordingState = .recording
                 statusMessage = "Recording..."
                 log(.info, "Transcription session started")
@@ -265,6 +276,9 @@ class TranscriptionViewModel: ObservableObject {
             } catch is CancellationError {
                 // User-initiated cancellation - silent cleanup, no error message
                 log(.info, "Recording start cancelled by user")
+                isASRConnected = false
+                preConnectionAudioBuffer.removeAll()
+                preConnectionBufferSize = 0
                 // Only clean up here if stopTask isn't already handling it
                 if recordingState != .stopping {
                     await performCleanup()
@@ -276,6 +290,9 @@ class TranscriptionViewModel: ObservableObject {
                 errorMessage = "Failed to start recording: \(error.localizedDescription)"
                 statusMessage = "Error"
                 log(.error, "Start recording error: \(error)")
+                isASRConnected = false
+                preConnectionAudioBuffer.removeAll()
+                preConnectionBufferSize = 0
                 if recordingState != .stopping {
                     await performCleanup()
                     recordingState = .idle
@@ -347,6 +364,9 @@ class TranscriptionViewModel: ObservableObject {
 
             recordingState = .idle
             audioActuallyStarted = false
+            isASRConnected = false
+            preConnectionAudioBuffer.removeAll()
+            preConnectionBufferSize = 0
             audioLevels = [0, 0, 0, 0, 0]
         }
     }
@@ -416,6 +436,9 @@ class TranscriptionViewModel: ObservableObject {
         }
         await asrClient.disconnect()
         audioActuallyStarted = false
+        isASRConnected = false
+        preConnectionAudioBuffer.removeAll()
+        preConnectionBufferSize = 0
     }
 
     /// Update audio levels with per-band smoothing
@@ -425,16 +448,56 @@ class TranscriptionViewModel: ObservableObject {
         }
     }
 
-    /// Send audio data to ASR service
+    /// Send audio data to ASR service (buffers if not yet connected)
     private func sendAudioToASR(_ audioData: Data) async {
         guard isRecording else { return }
 
-        do {
-            try await asrClient.sendAudioData(audioData)
-        } catch {
-            log(.error, "Failed to send audio: \(error)")
-            errorMessage = "Audio streaming error: \(error.localizedDescription)"
+        if isASRConnected {
+            // Connected — send directly
+            do {
+                try await asrClient.sendAudioData(audioData)
+            } catch {
+                log(.error, "Failed to send audio: \(error)")
+                errorMessage = "Audio streaming error: \(error.localizedDescription)"
+            }
+        } else {
+            // Not connected yet — buffer the data
+            preConnectionAudioBuffer.append(audioData)
+            preConnectionBufferSize += audioData.count
+
+            // Enforce 5-second cap: drop oldest segments
+            while preConnectionBufferSize > maxBufferBytes, !preConnectionAudioBuffer.isEmpty {
+                let removed = preConnectionAudioBuffer.removeFirst()
+                preConnectionBufferSize -= removed.count
+            }
+
+            log(.debug, "Buffered audio: \(audioData.count)B, total: \(preConnectionBufferSize)B (\(preConnectionAudioBuffer.count) segments)")
         }
+    }
+
+    /// Flush pre-connection audio buffer to ASR
+    private func flushAudioBuffer() async {
+        let segments = preConnectionAudioBuffer
+        let totalBytes = preConnectionBufferSize
+        preConnectionAudioBuffer.removeAll()
+        preConnectionBufferSize = 0
+
+        guard !segments.isEmpty else { return }
+
+        log(.info, "Flushing audio buffer: \(segments.count) segments, \(totalBytes) bytes")
+
+        var flushedCount = 0
+        for segment in segments {
+            do {
+                try await asrClient.sendAudioData(segment)
+                flushedCount += 1
+            } catch {
+                log(.error, "Failed to flush buffered audio: \(error)")
+                break
+            }
+        }
+
+        log(.info, "Audio buffer flushed: \(flushedCount)/\(segments.count) segments sent")
     }
 
     /// Listen to ASR results and update UI
