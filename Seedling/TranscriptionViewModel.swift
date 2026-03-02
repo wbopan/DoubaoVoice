@@ -46,7 +46,7 @@ class TranscriptionViewModel: ObservableObject {
     private var preConnectionAudioBuffer: [Data] = []
     private var preConnectionBufferSize = 0  // Track total bytes for cap enforcement
     private var isASRConnected = false
-    private let maxBufferBytes = 160_000  // 5 seconds at 16kHz/16-bit/mono
+    private let maxBufferBytes = Int(ASRConstants.sampleRate) * ASRConstants.bytesPerSample * 5
 
     private let audioRecorder = AudioRecorder()
     private let asrClient = ASRClient()
@@ -519,16 +519,18 @@ class TranscriptionViewModel: ObservableObject {
 
         log(.info, "Flushing audio buffer: \(segments.count) segments, \(totalBytes) bytes")
 
+        var flushedCount = 0
         for segment in segments {
             do {
                 try await asrClient.sendAudioData(segment)
+                flushedCount += 1
             } catch {
                 log(.error, "Failed to flush buffered audio: \(error)")
                 break
             }
         }
 
-        log(.info, "Audio buffer flushed")
+        log(.info, "Audio buffer flushed: \(flushedCount)/\(segments.count) segments sent")
     }
 
     /// Listen to ASR results and update UI
