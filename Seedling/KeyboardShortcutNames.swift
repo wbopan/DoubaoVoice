@@ -10,5 +10,4 @@ import KeyboardShortcuts
 
 extension KeyboardShortcuts.Name {
     static let toggleWindow = Self("toggleWindow", default: .init(.v, modifiers: [.command, .option]))
-    static let finishRecording = Self("finishRecording", default: .init(.return, modifiers: []))
 }

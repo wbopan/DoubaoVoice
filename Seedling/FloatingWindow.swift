@@ -8,7 +8,6 @@
 import Cocoa
 import SwiftUI
 import OSLog
-import KeyboardShortcuts
 
 // MARK: - Floating Window Controller
 
@@ -94,10 +93,10 @@ class FloatingWindowController: NSWindowController {
     convenience init() {
         log(.debug, "FloatingWindowController init() starting")
 
-        // Create floating window (minimal initial size)
+        // Create floating window (minimal initial size, non-activating)
         let window = FloatingWindow(
             contentRect: NSRect(x: 0, y: 0, width: 200, height: 70),
-            styleMask: [.borderless, .resizable],
+            styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
@@ -108,6 +107,7 @@ class FloatingWindowController: NSWindowController {
         window.isMovableByWindowBackground = true
         window.level = .floating
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        window.hidesOnDeactivate = false
 
         // Ensure window is visible
         window.isOpaque = false
@@ -157,7 +157,7 @@ class FloatingWindowController: NSWindowController {
             self?.saveWindowPosition()
         }
 
-        // Always stop recording when window becomes hidden (defense-in-depth)
+        // Stop recording when window becomes hidden (defense-in-depth)
         NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification,
             object: window,
@@ -165,19 +165,6 @@ class FloatingWindowController: NSWindowController {
         ) { [weak self] notification in
             guard let self = self else { return }
             self.ensureRecordingStopped()
-        }
-
-        // Observe when window is hidden/ordered out
-        NotificationCenter.default.addObserver(
-            forName: NSWindow.didResignKeyNotification,
-            object: window,
-            queue: .main
-        ) { [weak self] notification in
-            guard let self = self else { return }
-            // Only stop if window is actually becoming hidden
-            if self.window?.isVisible == false {
-                self.ensureRecordingStopped()
-            }
         }
     }
 
@@ -229,8 +216,6 @@ class FloatingWindowController: NSWindowController {
             }
         }
 
-        super.showWindow(sender)
-
         // Ensure window is visible
         guard let window = window else {
             log(.error, "Window is nil in showWindow")
@@ -239,17 +224,16 @@ class FloatingWindowController: NSWindowController {
 
         log(.debug, "Window exists, frame: \(window.frame)")
 
-        // Activate the app and show window
-        NSApp.activate(ignoringOtherApps: true)
-        log(.debug, "App activated")
-
-        window.makeKeyAndOrderFront(nil)
-        log(.debug, "makeKeyAndOrderFront called")
-
+        // Show window without stealing focus (non-activating panel)
+        window.alphaValue = 0
         window.orderFrontRegardless()
-        log(.debug, "orderFrontRegardless called")
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.2
+            window.animator().alphaValue = 1
+        }
+        log(.debug, "orderFrontRegardless called (non-activating)")
 
-        log(.info, "Window shown - frame: \(window.frame), isVisible: \(window.isVisible), isKeyWindow: \(window.isKeyWindow)")
+        log(.info, "Window shown - frame: \(window.frame), isVisible: \(window.isVisible)")
 
         // [Async Serial] Process context -> Set context -> Start recording
         // This ensures recording starts AFTER context is ready
@@ -376,22 +360,11 @@ class FloatingWindowController: NSWindowController {
         guard settings.autoPasteAfterClose else { return }
         guard !viewModel.transcribedText.isEmpty else { return }
 
-        guard let previousApp = previousActiveApp else {
-            log(.warning, "No previous app to paste into")
-            return
-        }
+        log(.info, "Performing auto-paste (previous app stays active)")
 
-        log(.info, "Performing auto-paste to \(previousApp.localizedName ?? "unknown app")")
-
-        // Brief delay before switching apps
+        // Brief delay then simulate Cmd+V — previous app remains focused
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-            // Activate the previous application
-            previousApp.activate()
-
-            // Wait for app to become active, then simulate Cmd+V
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                self?.simulatePasteKeystroke()
-            }
+            self?.simulatePasteKeystroke()
         }
     }
 
@@ -428,64 +401,10 @@ class FloatingWindowController: NSWindowController {
 
 // MARK: - Floating Window Class
 
+/// A non-activating panel that never steals focus from other applications
 class FloatingWindow: NSPanel {
-    private var localEventMonitor: Any?
-
-    override var canBecomeKey: Bool { true }
-    override var canBecomeMain: Bool { true }
-
-    override func becomeKey() {
-        super.becomeKey()
-        setupLocalEventMonitor()
-    }
-
-    override func resignKey() {
-        super.resignKey()
-        removeLocalEventMonitor()
-    }
-
-    private func setupLocalEventMonitor() {
-        removeLocalEventMonitor()
-
-        localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self = self else { return event }
-
-            // Handle Escape key for closing (works always)
-            if event.keyCode == 53 {
-                if let controller = self.windowController as? FloatingWindowController {
-                    controller.hideWindow()
-                }
-                return nil
-            }
-
-            // Handle finish hotkey (only when recording)
-            guard TranscriptionViewModel.shared.isRecording else {
-                return event
-            }
-
-            // Check if event matches the finish shortcut
-            if let shortcut = KeyboardShortcuts.getShortcut(for: .finishRecording),
-               let key = shortcut.key,
-               event.keyCode == UInt16(key.rawValue),
-               event.modifierFlags.intersection(.deviceIndependentFlagsMask).subtracting(.capsLock) == shortcut.modifiers {
-                NotificationCenter.default.post(name: .finishRecordingRequested, object: nil)
-                return nil
-            }
-
-            return event
-        }
-    }
-
-    private func removeLocalEventMonitor() {
-        if let monitor = localEventMonitor {
-            NSEvent.removeMonitor(monitor)
-            localEventMonitor = nil
-        }
-    }
-
-    deinit {
-        removeLocalEventMonitor()
-    }
+    override var canBecomeKey: Bool { false }
+    override var canBecomeMain: Bool { false }
 }
 
 // MARK: - Circular Glass Button
@@ -602,7 +521,7 @@ struct FloatingTranscriptionView: View {
                                 action: closeWindow
                             )
                             .glassEffectID("close", in: buttonNamespace)
-                            .help("Close (ESC)")
+                            .help("Close")
 
                             if viewModel.isRecording && !viewModel.transcribedText.isEmpty {
                                 CircularGlassButton(
@@ -611,7 +530,7 @@ struct FloatingTranscriptionView: View {
                                     action: finishRecording
                                 )
                                 .glassEffectID("submit", in: buttonNamespace)
-                                .help(finishHotkeyTooltip)
+                                .help("Done")
                                 .transition(.opacity)
                             }
                         }
@@ -632,9 +551,6 @@ struct FloatingTranscriptionView: View {
             DispatchQueue.main.async {
                 adjustWindowSize()
             }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .finishRecordingRequested)) { _ in
-            finishRecording()
         }
         .onReceive(NotificationCenter.default.publisher(for: .floatingWindowDidShow)) { _ in
             DispatchQueue.main.async {
@@ -708,20 +624,14 @@ struct FloatingTranscriptionView: View {
         })
     }
 
-    private var finishHotkeyTooltip: String {
-        if let shortcut = KeyboardShortcuts.getShortcut(for: .finishRecording) {
-            return "Done (\(shortcut.description))"
-        } else {
-            return "Done (no shortcut set)"
-        }
+    private func findController() -> FloatingWindowController? {
+        NSApp.windows
+            .first(where: { $0 is FloatingWindow })?
+            .windowController as? FloatingWindowController
     }
 
     private func closeWindow() {
-        // Find the window controller and hide the window
-        if let window = NSApp.keyWindow,
-           let controller = window.windowController as? FloatingWindowController {
-            controller.hideWindow()
-        }
+        findController()?.hideWindow()
     }
 
     private func finishRecording() {
@@ -734,8 +644,8 @@ struct FloatingTranscriptionView: View {
             }
 
             // Perform auto-paste if enabled and copy succeeded
-            if success, let controller = NSApp.keyWindow?.windowController as? FloatingWindowController {
-                controller.performAutoPasteIfEnabled()
+            if success {
+                findController()?.performAutoPasteIfEnabled()
             }
 
             // Close window
@@ -752,6 +662,5 @@ struct FloatingTranscriptionView: View {
 // MARK: - Notification Extensions
 
 extension Notification.Name {
-    static let finishRecordingRequested = Notification.Name("finishRecordingRequested")
     static let floatingWindowDidShow = Notification.Name("floatingWindowDidShow")
 }
