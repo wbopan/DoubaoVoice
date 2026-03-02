@@ -263,7 +263,7 @@ struct FloatingBallView: View {
             Circle()
                 .fill(Color.accentColor.opacity(0.3))
                 .frame(width: 44, height: 44)
-                .blur(radius: 6)
+                .blur(radius: 3)
 
             // Ball content with tinted liquid glass
             ZStack {

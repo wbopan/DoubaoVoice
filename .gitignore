@@ -110,18 +110,8 @@ Temporary Items
 *.swo
 *~
 
-# Python (for reference.py)
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-env/
-venv/
-.venv
-*.egg-info/
-.eggs/
-*.egg
-
 # Git worktrees
 worktrees/
+
+# Claude
+.claude/

@@ -6,9 +6,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Seedling is a macOS application for real-time speech-to-text transcription using the Seed ASR API. It features a native SwiftUI interface and implements the Seed ASR binary WebSocket protocol for streaming audio transcription.
 
-### Python Reference Implementation
-The `REFERENCE.py` file contains a daemon implementation with HTTP API. This is reference code showing the protocol implementation but is NOT the primary application.
-
 ## Build Commands
 
 ```bash
@@ -49,4 +46,4 @@ log(.error, "Failed to connect: \(error)")
 
 ## Creating Worktrees
 
-To create an worktree, put the worktree in ./worktrees
+To create a worktree, put the worktree in .claude/worktrees

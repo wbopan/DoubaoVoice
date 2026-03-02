@@ -255,6 +255,13 @@ class TranscriptionViewModel: ObservableObject {
                 // Mark that audio recording was actually started
                 audioActuallyStarted = true
 
+                // Check state after audio setup - stopRecording() may have been called
+                // during the actor hop to AudioRecorder, changing state to .stopping
+                guard recordingState == .connecting else {
+                    log(.info, "State changed during audio setup (\(recordingState)), stopTask will handle cleanup")
+                    return
+                }
+
                 // Only set .recording after audio actually starts
                 recordingState = .recording
                 statusMessage = "Recording..."
@@ -263,16 +270,21 @@ class TranscriptionViewModel: ObservableObject {
             } catch is CancellationError {
                 // User-initiated cancellation - silent cleanup, no error message
                 log(.info, "Recording start cancelled by user")
-                await performCleanup()
-                recordingState = .idle
+                // Only clean up here if stopTask isn't already handling it
+                if recordingState != .stopping {
+                    await performCleanup()
+                    recordingState = .idle
+                }
                 statusMessage = "Ready"
             } catch {
                 // Actual errors - show error message
                 errorMessage = "Failed to start recording: \(error.localizedDescription)"
                 statusMessage = "Error"
                 log(.error, "Start recording error: \(error)")
-                await performCleanup()
-                recordingState = .idle
+                if recordingState != .stopping {
+                    await performCleanup()
+                    recordingState = .idle
+                }
             }
         }
     }
@@ -288,11 +300,10 @@ class TranscriptionViewModel: ObservableObject {
         }
 
         let previousState = recordingState
-        let wasAudioStarted = audioActuallyStarted  // Capture before state change
         recordingState = .stopping
         statusMessage = "Stopping..."
 
-        log(.info, "Stopping transcription session (previous state: \(previousState), audioStarted: \(wasAudioStarted))...")
+        log(.info, "Stopping transcription session (previous state: \(previousState))...")
 
         // Cancel recording task if still running
         recordingTask?.cancel()
@@ -300,12 +311,9 @@ class TranscriptionViewModel: ObservableObject {
 
         // Store stop task so startRecording can wait for it
         stopTask = Task {
-            // Only stop audio recording if it was actually started
-            if wasAudioStarted {
-                await audioRecorder.stopRecording()
-            } else {
-                log(.debug, "Skipping audio stop - recording was never started")
-            }
+            // Always stop audio recording - it's idempotent (has guard isRecording)
+            // and handles the race where audio starts between flag capture and Task execution
+            await audioRecorder.stopRecording()
 
             // Handle ASR cleanup based on previous state
             if previousState == .recording {

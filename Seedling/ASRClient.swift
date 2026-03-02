@@ -323,8 +323,8 @@ actor ASRClient {
         log(.info, "Final packet sent")
     }
 
-    /// Wait for final result with timeout (3 seconds)
-    func waitForFinalResult(timeout: TimeInterval = 3.0) async -> ASRResult? {
+    /// Wait for final result with timeout (1.5 seconds)
+    func waitForFinalResult(timeout: TimeInterval = 1.5) async -> ASRResult? {
         log(.info, "Waiting for final result (timeout: \(timeout)s)...")
 
         do {
