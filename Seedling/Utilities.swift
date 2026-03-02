@@ -137,19 +137,6 @@ struct RecordingSession {
     }
 }
 
-/// Floating window mode
-enum FloatingWindowMode: String, Codable, CaseIterable {
-    case fullWindow = "full_window"
-    case floatingBall = "floating_ball"
-
-    var displayName: String {
-        switch self {
-        case .fullWindow: return "Full Mode"
-        case .floatingBall: return "Mini Mode"
-        }
-    }
-}
-
 /// Window position mode
 enum WindowPositionMode: String, Codable, CaseIterable {
     case rememberLast = "remember_last"
@@ -579,8 +566,6 @@ enum UserDefaultsKeys {
     static let windowPositionMode = "Seedling.WindowPositionMode"
     static let windowPositionX = "Seedling.WindowPositionX"
     static let windowPositionY = "Seedling.WindowPositionY"
-    static let finishHotkeyKeyCode = "Seedling.FinishHotkeyKeyCode"
-    static let finishHotkeyModifiers = "Seedling.FinishHotkeyModifiers"
     static let autoPasteAfterClose = "Seedling.AutoPasteAfterClose"
     static let removeTrailingPunctuation = "Seedling.RemoveTrailingPunctuation"
 
@@ -596,11 +581,6 @@ enum UserDefaultsKeys {
 
     // Microphone selection
     static let selectedMicrophoneUID = "Seedling.SelectedMicrophoneUID"
-
-    // Floating window mode
-    static let floatingWindowMode = "Seedling.FloatingWindowMode"
-    static let ballPositionX = "Seedling.BallPositionX"
-    static let ballPositionY = "Seedling.BallPositionY"
 
     static let defaultPort = 18888
     static let defaultMaxContextLength = 2000
@@ -675,12 +655,6 @@ struct HotkeyConfig: Codable, Equatable {
         modifiers: UInt32(optionKey | cmdKey)
     )
 
-    // Default finish hotkey: Enter key with no modifiers (local scope)
-    static let defaultFinish = HotkeyConfig(
-        keyCode: 36,  // Enter key
-        modifiers: 0  // No modifiers required (local scope)
-    )
-
     // Unset hotkey (no binding)
     static let unset = HotkeyConfig(
         keyCode: 0,
@@ -727,13 +701,6 @@ class AppSettings: ObservableObject {
         }
     }
 
-    @Published var finishHotkey: HotkeyConfig {
-        didSet {
-            defaults.set(finishHotkey.keyCode, forKey: UserDefaultsKeys.finishHotkeyKeyCode)
-            defaults.set(finishHotkey.modifiers, forKey: UserDefaultsKeys.finishHotkeyModifiers)
-        }
-    }
-
     @Published var windowPositionMode: WindowPositionMode {
         didSet {
             if let encoded = try? JSONEncoder().encode(windowPositionMode) {
@@ -776,15 +743,6 @@ class AppSettings: ObservableObject {
         didSet { defaults.set(selectedMicrophoneUID, forKey: UserDefaultsKeys.selectedMicrophoneUID) }
     }
 
-    @Published var floatingWindowMode: FloatingWindowMode {
-        didSet {
-            if let encoded = try? JSONEncoder().encode(floatingWindowMode) {
-                defaults.set(encoded, forKey: UserDefaultsKeys.floatingWindowMode)
-            }
-            NotificationCenter.default.post(name: .floatingWindowModeChanged, object: nil)
-        }
-    }
-
     private init() {
         // Load saved values or use defaults (from reference.py credentials)
         self.appKey = defaults.string(forKey: UserDefaultsKeys.appKey) ?? "3254061168"
@@ -794,11 +752,6 @@ class AppSettings: ObservableObject {
         let keyCode = defaults.object(forKey: UserDefaultsKeys.globalHotkeyKeyCode) as? UInt32 ?? HotkeyConfig.default.keyCode
         let modifiers = defaults.object(forKey: UserDefaultsKeys.globalHotkeyModifiers) as? UInt32 ?? HotkeyConfig.default.modifiers
         self.globalHotkey = HotkeyConfig(keyCode: keyCode, modifiers: modifiers)
-
-        // Load finish hotkey config
-        let finishKeyCode = defaults.object(forKey: UserDefaultsKeys.finishHotkeyKeyCode) as? UInt32 ?? HotkeyConfig.defaultFinish.keyCode
-        let finishModifiers = defaults.object(forKey: UserDefaultsKeys.finishHotkeyModifiers) as? UInt32 ?? HotkeyConfig.defaultFinish.modifiers
-        self.finishHotkey = HotkeyConfig(keyCode: finishKeyCode, modifiers: finishModifiers)
 
         // Load window position mode with migration from old boolean setting
         if let modeData = defaults.data(forKey: UserDefaultsKeys.windowPositionMode),
@@ -838,14 +791,6 @@ class AppSettings: ObservableObject {
         // Load microphone selection (empty string = system default)
         self.selectedMicrophoneUID = defaults.string(forKey: UserDefaultsKeys.selectedMicrophoneUID) ?? ""
 
-        // Load floating window mode
-        if let modeData = defaults.data(forKey: UserDefaultsKeys.floatingWindowMode),
-           let mode = try? JSONDecoder().decode(FloatingWindowMode.self, from: modeData) {
-            self.floatingWindowMode = mode
-        } else {
-            self.floatingWindowMode = .fullWindow
-        }
-
         // Migrate: Remove deprecated resourceID setting
         if defaults.object(forKey: UserDefaultsKeys.resourceID) != nil {
             defaults.removeObject(forKey: UserDefaultsKeys.resourceID)
@@ -866,19 +811,6 @@ class AppSettings: ObservableObject {
         guard windowPositionMode == .rememberLast else { return }
         defaults.set(position.x, forKey: UserDefaultsKeys.windowPositionX)
         defaults.set(position.y, forKey: UserDefaultsKeys.windowPositionY)
-    }
-
-    func getSavedBallPosition() -> NSPoint? {
-        guard let x = defaults.object(forKey: UserDefaultsKeys.ballPositionX) as? CGFloat,
-              let y = defaults.object(forKey: UserDefaultsKeys.ballPositionY) as? CGFloat else {
-            return nil
-        }
-        return NSPoint(x: x, y: y)
-    }
-
-    func saveBallPosition(_ position: NSPoint) {
-        defaults.set(position.x, forKey: UserDefaultsKeys.ballPositionX)
-        defaults.set(position.y, forKey: UserDefaultsKeys.ballPositionY)
     }
 
     /// Migrate legacy Carbon hotkey settings to KeyboardShortcuts
@@ -906,36 +838,4 @@ class AppSettings: ObservableObject {
         defaults.set(true, forKey: migrationKey)
     }
 
-    /// Migrate legacy finish hotkey settings to KeyboardShortcuts
-    static func migrateFinishHotkeyIfNeeded() {
-        let defaults = UserDefaults.standard
-        let migrationKey = "Seedling.FinishHotkeyMigrationCompleted"
-
-        guard !defaults.bool(forKey: migrationKey) else { return }
-
-        // Check if there's an existing finish hotkey setting
-        if let keyCode = defaults.object(forKey: UserDefaultsKeys.finishHotkeyKeyCode) as? UInt32,
-           let modifiers = defaults.object(forKey: UserDefaultsKeys.finishHotkeyModifiers) as? UInt32 {
-
-            // Skip if it's the "unset" value (keyCode 0 and modifiers 0)
-            if keyCode == 0 && modifiers == 0 {
-                // Clear any shortcut that might be set
-                KeyboardShortcuts.setShortcut(nil, for: .finishRecording)
-                log(.info, "Finish hotkey was unset, cleared KeyboardShortcuts binding")
-            } else {
-                let key = KeyboardShortcuts.Key(rawValue: Int(keyCode))
-
-                var mods: NSEvent.ModifierFlags = []
-                if modifiers & UInt32(cmdKey) != 0 { mods.insert(.command) }
-                if modifiers & UInt32(optionKey) != 0 { mods.insert(.option) }
-                if modifiers & UInt32(shiftKey) != 0 { mods.insert(.shift) }
-                if modifiers & UInt32(controlKey) != 0 { mods.insert(.control) }
-
-                KeyboardShortcuts.setShortcut(.init(key, modifiers: mods), for: .finishRecording)
-                log(.info, "Migrated legacy finish hotkey to KeyboardShortcuts (keyCode: \(keyCode))")
-            }
-        }
-
-        defaults.set(true, forKey: migrationKey)
-    }
 }

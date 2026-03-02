@@ -396,56 +396,21 @@ struct ControlsSettingsTab: View {
                     .foregroundColor(.secondary)
             }
 
-            if settings.floatingWindowMode == .fullWindow {
-                Section {
-                    HStack {
-                        Text("Done:")
-                            .fixedSize()
-                        Spacer()
-                        KeyboardShortcuts.Recorder("", name: .finishRecording)
-                            .fixedSize()
-                    }
-                    .fixedSize(horizontal: false, vertical: true)
-                } header: {
-                    Text("Window Shortcut")
-                        .font(.headline)
-                } footer: {
-                    Text("Finish dictation and copy text to clipboard. Only works when the window is focused.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-
             PushToTalkSection(settings: settings)
 
-            if settings.floatingWindowMode == .fullWindow {
-                Section {
-                    Toggle("Auto-paste after finish", isOn: $settings.autoPasteAfterClose)
-                    Toggle("Remove trailing punctuation", isOn: $settings.removeTrailingPunctuation)
-                } header: {
-                    Text("Behavior")
-                        .font(.headline)
-                } footer: {
-                    Text("Automatically paste transcribed text into the previous application when using the finish action. Remove trailing punctuation removes both full-width (。！？) and half-width (. ! ?) punctuation marks from the end of the transcribed text.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            } else {
-                Section {
-                    Toggle("Remove trailing punctuation", isOn: $settings.removeTrailingPunctuation)
-                } header: {
-                    Text("Behavior")
-                        .font(.headline)
-                }
+            Section {
+                Toggle("Auto-paste after finish", isOn: $settings.autoPasteAfterClose)
+                Toggle("Remove trailing punctuation", isOn: $settings.removeTrailingPunctuation)
+            } header: {
+                Text("Behavior")
+                    .font(.headline)
+            } footer: {
+                Text("Automatically paste transcribed text into the previous application when using the finish action. Remove trailing punctuation removes both full-width and half-width punctuation marks from the end of the transcribed text.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
 
             Section {
-                Picker("Window mode:", selection: $settings.floatingWindowMode) {
-                    ForEach(FloatingWindowMode.allCases, id: \.self) { mode in
-                        Text(mode.displayName).tag(mode)
-                    }
-                }
-
                 Picker("Window position:", selection: $settings.windowPositionMode) {
                     ForEach(WindowPositionMode.allCases, id: \.self) { mode in
                         Text(mode.displayName).tag(mode)
