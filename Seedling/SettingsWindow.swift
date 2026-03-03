@@ -17,12 +17,14 @@ class SettingsWindowController: NSWindowController {
     convenience init() {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 700, height: 500),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
 
         window.title = "Settings"
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
         window.center()
         window.isReleasedWhenClosed = false
         window.minSize = NSSize(width: 550, height: 400)
@@ -73,7 +75,7 @@ struct SettingsView: View {
     @State private var selectedPane: SettingsPane = .api
 
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: .constant(.all)) {
             List(SettingsPane.allCases, selection: $selectedPane) { pane in
                 Label(pane.label, systemImage: pane.icon)
                     .tag(pane)
@@ -83,6 +85,8 @@ struct SettingsView: View {
             detailView
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .navigationSplitViewStyle(.balanced)
+        .toolbar(removing: .sidebarToggle)
         .onDisappear {
             TranscriptionViewModel.shared.updateConfig(settings: settings)
         }
@@ -499,9 +503,11 @@ struct AboutTab: View {
         VStack(spacing: 20) {
             Spacer()
 
-            Image(systemName: "waveform.circle.fill")
-                .font(.system(size: 64))
-                .foregroundColor(.accentColor)
+            Image("AboutIcon")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 64, height: 64)
+                .foregroundStyle(Color.accentColor)
 
             Text(appName)
                 .font(.title)

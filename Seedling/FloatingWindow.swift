@@ -453,65 +453,77 @@ struct FloatingTranscriptionView: View {
     private let maxCapsuleWidth: CGFloat = 400
     private let waveformZoneWidth: CGFloat = 28
     private let submitZoneWidth: CGFloat = 28
-    private let horizontalPadding: CGFloat = 8
+    private let horizontalPadding: CGFloat = 6
     private let typewriterInterval: TimeInterval = 0.03
 
     private var hasText: Bool {
         !displayedText.isEmpty
     }
 
+    private var showSubmit: Bool {
+        !viewModel.transcribedText.isEmpty && viewModel.isRecording
+    }
+
+    /// Left edge of content area (after waveform + divider)
+    private var contentLeading: CGFloat {
+        horizontalPadding + waveformZoneWidth + 1
+    }
+
     var body: some View {
-        HStack(spacing: 0) {
-            // Left zone: waveform or close button (never shrinks)
-            leftZone
-                .frame(width: waveformZoneWidth, height: capsuleHeight)
-                .fixedSize()
-                .layoutPriority(1)
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    if isHovering {
-                        closeWindow()
-                    }
+        Color.clear
+            .overlay {
+                // Waveform / close zone — use GeometryReader to pin position
+                GeometryReader { geo in
+                    leftZone
+                        .frame(width: waveformZoneWidth, height: capsuleHeight)
+                        .position(
+                            x: horizontalPadding + waveformZoneWidth / 2,
+                            y: geo.size.height / 2
+                        )
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            if isHovering {
+                                closeWindow()
+                            }
+                        }
                 }
-
-            // Divider between waveform and text (always in layout, opacity controlled)
-            RoundedRectangle(cornerRadius: 0.5)
-                .fill(Color.primary.opacity(hasText ? 0.15 : 0))
-                .frame(width: 1, height: 16)
-
-            // Center: text (only when text exists)
-            // Before max width: left-aligned (text grows rightward)
-            // After max width: right-aligned (newest text visible, left overflows)
-            if hasText {
-                Color.clear
-                    .frame(maxWidth: .infinity)
-                    .overlay(alignment: reachedMaxWidth ? .trailing : .leading) {
-                        Text(displayedText)
-                            .font(.system(size: 14))
-                            .lineLimit(1)
-                            .fixedSize(horizontal: true, vertical: false)
-                    }
-                    .clipped()
-                    .padding(.horizontal, 6)
             }
+            .overlay(alignment: .leading) {
+                // Divider + text + submit
+                HStack(spacing: 0) {
+                    // Divider
+                    RoundedRectangle(cornerRadius: 0.5)
+                        .fill(Color.primary.opacity(0.15))
+                        .frame(width: 1, height: 16)
 
-            // Right zone: submit arrow (only when text exists and recording)
-            if !viewModel.transcribedText.isEmpty && viewModel.isRecording {
-                Image(systemName: "arrow.up")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.primary)
-                    .frame(width: 24, height: 24)
-                    .background(Circle().fill(Color.primary.opacity(0.1)))
-                    .padding(.trailing, horizontalPadding)
-                    .contentShape(Circle())
-                    .onTapGesture {
-                        finishRecording()
-                    }
-                    .transition(.scale.combined(with: .opacity))
+                    // Text area
+                    Color.clear
+                        .frame(maxWidth: .infinity)
+                        .overlay(alignment: reachedMaxWidth ? .trailing : .leading) {
+                            Text(displayedText)
+                                .font(.system(size: 14))
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
+                        }
+                        .clipped()
+                        .padding(.horizontal, 6)
+
+                    // Submit arrow
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .frame(width: showSubmit ? 24 : 0, height: showSubmit ? 24 : 0)
+                        .background(Circle().fill(Color.primary.opacity(0.1)))
+                        .opacity(showSubmit ? 1 : 0)
+                        .padding(.trailing, showSubmit ? horizontalPadding : 0)
+                        .contentShape(Circle())
+                        .onTapGesture {
+                            finishRecording()
+                        }
+                }
+                .padding(.leading, contentLeading)
+                .opacity(hasText ? 1 : 0)
             }
-        }
-        .padding(.leading, horizontalPadding)
-        .padding(.trailing, hasText && viewModel.isRecording ? 0 : horizontalPadding)
         .frame(height: capsuleHeight)
         .frame(minWidth: capsuleHeight)
         .background(.clear)
@@ -590,11 +602,6 @@ struct FloatingTranscriptionView: View {
         // Already caught up
         if displayedText == target { return }
 
-        // Pre-size window before first character to prevent layout flash
-        if displayedText.isEmpty && !target.isEmpty {
-            preExpandWindow(for: target)
-        }
-
         // Reveal characters one by one
         typewriterTimer = Timer.scheduledTimer(withTimeInterval: typewriterInterval, repeats: true) { [self] timer in
             let target = viewModel.transcribedText
@@ -616,30 +623,6 @@ struct FloatingTranscriptionView: View {
     }
 
     // MARK: - Window Size
-
-    /// Pre-expand window to minimum capsule width before first character appears
-    private func preExpandWindow(for text: String) {
-        guard let window = NSApp.windows.first(where: { $0 is FloatingWindow }) else { return }
-
-        let minCapsuleWidth = capsuleHeight + 60
-        let currentFrame = window.frame
-
-        let centerAnchored = {
-            let mode = AppSettings.shared.windowPositionMode
-            return mode == .topCenter || mode == .bottomCenter
-        }()
-
-        let newX = centerAnchored
-            ? currentFrame.midX - minCapsuleWidth / 2
-            : currentFrame.origin.x
-
-        window.setFrame(NSRect(
-            x: newX,
-            y: currentFrame.origin.y,
-            width: minCapsuleWidth,
-            height: capsuleHeight
-        ), display: true)
-    }
 
     private func adjustWindowSize() {
         guard let window = NSApp.windows.first(where: { $0 is FloatingWindow }) else { return }
