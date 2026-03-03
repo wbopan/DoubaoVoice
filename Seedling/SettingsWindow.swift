@@ -16,8 +16,8 @@ import KeyboardShortcuts
 class SettingsWindowController: NSWindowController {
     convenience init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 550, height: 500),
-            styleMask: [.titled, .closable, .fullSizeContentView],
+            contentRect: NSRect(x: 0, y: 0, width: 700, height: 500),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
@@ -25,9 +25,7 @@ class SettingsWindowController: NSWindowController {
         window.title = "Settings"
         window.center()
         window.isReleasedWhenClosed = false
-        window.titlebarAppearsTransparent = true
-        window.isOpaque = false
-        window.backgroundColor = .clear
+        window.minSize = NSSize(width: 550, height: 400)
 
         // Create SwiftUI view
         let contentView = SettingsView()
@@ -42,88 +40,65 @@ class SettingsWindowController: NSWindowController {
     }
 }
 
+// MARK: - Settings Pane
+
+enum SettingsPane: String, CaseIterable, Identifiable {
+    case api, context, controls, about
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .api: return "API"
+        case .context: return "Context"
+        case .controls: return "Controls"
+        case .about: return "About"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .api: return "key.fill"
+        case .context: return "text.bubble"
+        case .controls: return "command"
+        case .about: return "info.circle"
+        }
+    }
+}
+
 // MARK: - Settings View
 
 struct SettingsView: View {
     @ObservedObject private var settings = AppSettings.shared
-    private let viewModel = TranscriptionViewModel.shared
-
-    @State private var tempAppKey = ""
-    @State private var tempAccessKey = ""
-    @State private var tempContext = ""
+    @State private var selectedPane: SettingsPane = .api
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Tabbed interface
-            TabView {
-                APISettingsTab(appKey: $tempAppKey, accessKey: $tempAccessKey)
-                    .tabItem {
-                        Label("API", systemImage: "key.fill")
-                    }
-
-                ContextSettingsTab(context: $tempContext)
-                    .tabItem {
-                        Label("Context", systemImage: "text.bubble")
-                    }
-
-                ControlsSettingsTab(settings: settings)
-                    .tabItem {
-                        Label("Controls", systemImage: "command")
-                    }
-
-                AboutTab()
-                    .tabItem {
-                        Label("About", systemImage: "info.circle")
-                    }
+        NavigationSplitView {
+            List(SettingsPane.allCases, selection: $selectedPane) { pane in
+                Label(pane.label, systemImage: pane.icon)
+                    .tag(pane)
             }
-            .padding(.top, 8)
-
-            // Bottom button bar
-            Divider()
-
-            HStack {
-                Spacer()
-
-                Button("Cancel") {
-                    closeWindow()
-                }
-                .keyboardShortcut(.cancelAction)
-
-                Button("Save") {
-                    saveSettings()
-                }
-                .keyboardShortcut(.defaultAction)
-            }
-            .padding()
+            .navigationSplitViewColumnWidth(min: 160, ideal: 180, max: 220)
+        } detail: {
+            detailView
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .background(.thickMaterial)
-        .onAppear {
-            // Load current settings
-            tempAppKey = settings.appKey
-            tempAccessKey = settings.accessKey
-            tempContext = settings.context
-        }
-        .onChange(of: settings.context) { _, newValue in
-            // Sync tempContext when settings.context is updated externally (e.g., by context capture)
-            tempContext = newValue
+        .onDisappear {
+            TranscriptionViewModel.shared.updateConfig(settings: settings)
         }
     }
 
-    private func saveSettings() {
-        // Save settings
-        settings.appKey = tempAppKey
-        settings.accessKey = tempAccessKey
-        settings.context = tempContext
-
-        // Update view model config
-        viewModel.updateConfig(settings: settings)
-
-        closeWindow()
-    }
-
-    private func closeWindow() {
-        if let window = NSApp.keyWindow {
-            window.close()
+    @ViewBuilder
+    private var detailView: some View {
+        switch selectedPane {
+        case .api:
+            APISettingsTab(settings: settings)
+        case .context:
+            ContextSettingsTab(settings: settings)
+        case .controls:
+            ControlsSettingsTab(settings: settings)
+        case .about:
+            AboutTab()
         }
     }
 }
@@ -131,16 +106,15 @@ struct SettingsView: View {
 // MARK: - API Settings Tab
 
 struct APISettingsTab: View {
-    @Binding var appKey: String
-    @Binding var accessKey: String
+    @ObservedObject var settings: AppSettings
 
     var body: some View {
         Form {
             Section {
-                TextField("App Key:", text: $appKey)
+                TextField("App Key:", text: $settings.appKey)
                     .textFieldStyle(.roundedBorder)
 
-                SecureField("Access Key:", text: $accessKey)
+                SecureField("Access Key:", text: $settings.accessKey)
                     .textFieldStyle(.roundedBorder)
             } header: {
                 Text("Seed ASR Credentials")
@@ -179,15 +153,13 @@ struct APISettingsTab: View {
             }
         }
         .formStyle(.grouped)
-        .scrollContentBackground(.hidden)
     }
 }
 
 // MARK: - Context Settings Tab
 
 struct ContextSettingsTab: View {
-    @Binding var context: String
-    @ObservedObject private var settings = AppSettings.shared
+    @ObservedObject var settings: AppSettings
 
     var body: some View {
         Form {
@@ -197,7 +169,7 @@ struct ContextSettingsTab: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
 
-                    TextEditor(text: $context)
+                    TextEditor(text: $settings.context)
                         .font(.system(.body))
                         .frame(height: 100)
                         .scrollContentBackground(.hidden)
@@ -211,9 +183,9 @@ struct ContextSettingsTab: View {
                     // Character count
                     HStack {
                         Spacer()
-                        Text("\(context.count) / \(settings.maxContextLength)")
+                        Text("\(settings.context.count) / \(settings.maxContextLength)")
                             .font(.caption2)
-                            .foregroundColor(context.count > settings.maxContextLength ? .red : .secondary)
+                            .foregroundColor(settings.context.count > settings.maxContextLength ? .red : .secondary)
                     }
                 }
             } header: {
@@ -224,7 +196,6 @@ struct ContextSettingsTab: View {
             ContextCaptureSection(settings: settings)
         }
         .formStyle(.grouped)
-        .scrollContentBackground(.hidden)
     }
 }
 
@@ -422,7 +393,6 @@ struct ControlsSettingsTab: View {
             }
         }
         .formStyle(.grouped)
-        .scrollContentBackground(.hidden)
     }
 }
 
@@ -555,5 +525,5 @@ struct AboutTab: View {
 
 #Preview {
     SettingsView()
-        .frame(width: 550, height: 500)
+        .frame(width: 700, height: 500)
 }
