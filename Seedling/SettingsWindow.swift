@@ -434,7 +434,14 @@ struct PushToTalkSection: View {
                     }
                 }
 
-                Picker("Modifier key:", selection: configBinding(\.modifierKey)) {
+                Picker("Modifier key:", selection: configBinding(\.modifierKey, onSet: { newKey in
+                    // Auto-disable double-tap for side-specific keys
+                    if newKey.isSideSpecific && settings.longPressConfig.requireDoubleTap {
+                        var config = settings.longPressConfig
+                        config.requireDoubleTap = false
+                        settings.longPressConfig = config
+                    }
+                })) {
                     ForEach(LongPressModifierKey.allCases, id: \.self) { key in
                         Text("\(key.symbol) \(key.displayName)").tag(key)
                     }
@@ -454,7 +461,9 @@ struct PushToTalkSection: View {
                         .monospacedDigit()
                 }
 
-                Toggle("Require double-tap", isOn: configBinding(\.requireDoubleTap))
+                if !settings.longPressConfig.modifierKey.isSideSpecific {
+                    Toggle("Require double-tap", isOn: configBinding(\.requireDoubleTap))
+                }
             }
         } header: {
             Text("Push to Talk")
