@@ -83,9 +83,9 @@ struct SettingsView: View {
             detailView
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .onChange(of: settings.appKey) { _, _ in updateConfig() }
-        .onChange(of: settings.accessKey) { _, _ in updateConfig() }
-        .onChange(of: settings.context) { _, _ in updateConfig() }
+        .onDisappear {
+            TranscriptionViewModel.shared.updateConfig(settings: settings)
+        }
     }
 
     @ViewBuilder
@@ -100,10 +100,6 @@ struct SettingsView: View {
         case .about:
             AboutTab()
         }
-    }
-
-    private func updateConfig() {
-        TranscriptionViewModel.shared.updateConfig(settings: settings)
     }
 }
 
