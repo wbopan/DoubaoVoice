@@ -374,10 +374,24 @@ class TranscriptionViewModel: ObservableObject {
 
     /// Finish recording, wait for final result, and copy to clipboard
     func finishRecordingAndCopy() async -> Bool {
-        guard recordingState == .recording else { return false }
+        guard recordingState == .recording || recordingState == .connecting else { return false }
 
-        log(.info, "Finishing transcription with copy to clipboard...")
+        log(.info, "Finishing transcription with copy to clipboard (state: \(recordingState))...")
         statusMessage = "Finishing..."
+
+        // If still connecting, wait for connection to complete before stopping
+        if recordingState == .connecting {
+            log(.info, "Still connecting, waiting for connection to complete...")
+            if let task = recordingTask {
+                await task.value
+            }
+            // Check if connection succeeded
+            guard recordingState == .recording else {
+                log(.warning, "Connection did not complete successfully (state: \(recordingState)), aborting finish")
+                return false
+            }
+            log(.info, "Connection completed, proceeding with finish")
+        }
 
         // Stop recording (reuse existing logic)
         stopRecording()

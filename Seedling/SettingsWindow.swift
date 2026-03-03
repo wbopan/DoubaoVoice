@@ -7,13 +7,12 @@
 
 import Cocoa
 import SwiftUI
-import Carbon
 import LaunchAtLogin
 import KeyboardShortcuts
 
 // MARK: - Settings Window Controller
 
-class SettingsWindowController: NSWindowController {
+class SettingsWindowController: NSWindowController, NSWindowDelegate {
     convenience init() {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 700, height: 500),
@@ -29,11 +28,11 @@ class SettingsWindowController: NSWindowController {
         window.isReleasedWhenClosed = false
         window.minSize = NSSize(width: 550, height: 400)
 
-        // Create SwiftUI view
         let contentView = SettingsView()
         window.contentView = NSHostingView(rootView: contentView)
 
         self.init(window: window)
+        window.delegate = self
     }
 
     override func showWindow(_ sender: Any?) {
@@ -357,6 +356,12 @@ struct GeneralSettingsTab: View {
         Form {
             Section {
                 LaunchAtLogin.Toggle("Launch at login")
+                Toggle("Show menu bar icon", isOn: $settings.showMenuBarIcon)
+                if !settings.showMenuBarIcon {
+                    Text("Open Seedling from Applications or Spotlight to access settings.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             } header: {
                 Text("General")
                     .font(.headline)

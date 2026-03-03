@@ -27,8 +27,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Set activation policy to accessory (no dock icon)
         NSApp.setActivationPolicy(.accessory)
 
-        // Setup menu bar icon
-        setupStatusItem()
+        // Setup menu bar icon (respects user preference)
+        if settings.showMenuBarIcon {
+            setupStatusItem()
+        }
 
         // Setup global hotkey
         setupHotkey()
@@ -52,7 +54,30 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             object: nil
         )
 
+        // Observe menu bar icon visibility changes
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleMenuBarIconVisibilityChanged),
+            name: .menuBarIconVisibilityChanged,
+            object: nil
+        )
+
+        // Override the system Settings/Preferences menu item (Cmd+,)
+        DispatchQueue.main.async { [weak self] in
+            self?.overrideSettingsMenuItem()
+
+            // If menu bar icon is hidden, open settings so the user has a way to interact
+            if self?.settings.showMenuBarIcon == false {
+                self?.openSettings()
+            }
+        }
+
         log(.info, "Seedling menu bar app launched")
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        openSettings()
+        return false
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -82,6 +107,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(quitItem)
 
         statusItem.menu = menu
+    }
+
+    /// Replace the SwiftUI-generated Settings menu item with our own that opens our custom settings window.
+    private func overrideSettingsMenuItem() {
+        guard let appMenu = NSApp.mainMenu?.item(at: 0)?.submenu else { return }
+        for (index, item) in appMenu.items.enumerated() {
+            if item.keyEquivalent == "," {
+                let newItem = NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ",")
+                newItem.keyEquivalentModifierMask = .command
+                newItem.target = self
+                appMenu.removeItem(at: index)
+                appMenu.insertItem(newItem, at: index)
+                break
+            }
+        }
     }
 
     // MARK: - Global Hotkey Setup
@@ -144,6 +184,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         setupDoubleTapHoldMonitor()
     }
 
+    @objc private func handleMenuBarIconVisibilityChanged() {
+        if settings.showMenuBarIcon {
+            if statusItem == nil {
+                setupStatusItem()
+            }
+            statusItem.isVisible = true
+        } else {
+            statusItem?.isVisible = false
+        }
+        log(.info, "Menu bar icon visibility changed: \(settings.showMenuBarIcon)")
+    }
+
     @MainActor
     private func handleDoubleTapHoldActivate() {
         log(.info, "Push to Talk activated, showing window and starting recording")
@@ -158,13 +210,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        if viewModel.transcribedText.isEmpty {
-            log(.info, "Push to Talk released with no text, closing window")
-            controller.hideWindow()
-        } else {
-            log(.info, "Push to Talk released with text, triggering finish recording")
-            controller.finishRecordingAndDismiss()
-        }
+        log(.info, "Push to Talk released, triggering finish recording")
+        controller.finishRecordingAndDismiss()
     }
 
     // MARK: - Window Management
@@ -190,9 +237,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func openSettings() {
         if settingsWindowController == nil {
             settingsWindowController = SettingsWindowController()
+            // Observe this specific window closing
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(settingsWindowWillClose(_:)),
+                name: NSWindow.willCloseNotification,
+                object: settingsWindowController?.window
+            )
         }
+        NSApp.setActivationPolicy(.regular)
         settingsWindowController?.showWindow(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
+    }
+
+    @objc private func settingsWindowWillClose(_ notification: Notification) {
+        NSApp.setActivationPolicy(.accessory)
     }
 
     @objc private func quit() {
@@ -500,4 +559,5 @@ class ModifierKeyMonitor {
 extension Notification.Name {
     static let globalHotkeyChanged = Notification.Name("globalHotkeyChanged")
     static let longPressConfigChanged = Notification.Name("longPressConfigChanged")
+    static let menuBarIconVisibilityChanged = Notification.Name("menuBarIconVisibilityChanged")
 }

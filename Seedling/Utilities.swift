@@ -612,6 +612,7 @@ enum UserDefaultsKeys {
     // Appearance
     static let glassTintStyle = "Seedling.GlassTintStyle"
     static let screenEdgeMargin = "Seedling.ScreenEdgeMargin"
+    static let showMenuBarIcon = "Seedling.ShowMenuBarIcon"
 
     static let defaultPort = 18888
     static let defaultMaxContextLength = 2000
@@ -840,6 +841,13 @@ class AppSettings: ObservableObject {
         didSet { defaults.set(Double(screenEdgeMargin), forKey: UserDefaultsKeys.screenEdgeMargin) }
     }
 
+    @Published var showMenuBarIcon: Bool {
+        didSet {
+            defaults.set(showMenuBarIcon, forKey: UserDefaultsKeys.showMenuBarIcon)
+            NotificationCenter.default.post(name: .menuBarIconVisibilityChanged, object: nil)
+        }
+    }
+
     private init() {
         // Load saved values or use defaults (from reference.py credentials)
         self.appKey = defaults.string(forKey: UserDefaultsKeys.appKey) ?? "3254061168"
@@ -895,6 +903,8 @@ class AppSettings: ObservableObject {
         } else {
             self.glassTintStyle = .clear
         }
+        self.showMenuBarIcon = defaults.object(forKey: UserDefaultsKeys.showMenuBarIcon) as? Bool ?? true
+
         self.screenEdgeMargin = CGFloat(defaults.double(forKey: UserDefaultsKeys.screenEdgeMargin))
         if self.screenEdgeMargin == 0 {
             self.screenEdgeMargin = UserDefaultsKeys.defaultScreenEdgeMargin
