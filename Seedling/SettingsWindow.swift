@@ -75,7 +75,7 @@ struct SettingsView: View {
     @State private var selectedPane: SettingsPane = .api
 
     var body: some View {
-        NavigationSplitView(columnVisibility: .constant(.all)) {
+        NavigationSplitView {
             List(SettingsPane.allCases, selection: $selectedPane) { pane in
                 Label(pane.label, systemImage: pane.icon)
                     .tag(pane)
@@ -86,7 +86,6 @@ struct SettingsView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .navigationSplitViewStyle(.balanced)
-        .toolbar(removing: .sidebarToggle)
         .onDisappear {
             TranscriptionViewModel.shared.updateConfig(settings: settings)
         }
@@ -461,9 +460,7 @@ struct PushToTalkSection: View {
                         .monospacedDigit()
                 }
 
-                if !settings.longPressConfig.modifierKey.isSideSpecific {
-                    Toggle("Require double-tap", isOn: configBinding(\.requireDoubleTap))
-                }
+                Toggle("Require double-tap", isOn: configBinding(\.requireDoubleTap))
             }
         } header: {
             Text("Push to Talk")

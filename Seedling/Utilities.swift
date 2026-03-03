@@ -609,16 +609,16 @@ enum LongPressModifierKey: String, Codable, CaseIterable {
 
     var displayName: String {
         switch self {
-        case .option:       return "Option (Any)"
+        case .option:       return "Option"
         case .leftOption:   return "Left Option"
         case .rightOption:  return "Right Option"
-        case .command:      return "Command (Any)"
+        case .command:      return "Command"
         case .leftCommand:  return "Left Command"
         case .rightCommand: return "Right Command"
-        case .control:      return "Control (Any)"
+        case .control:      return "Control"
         case .leftControl:  return "Left Control"
         case .rightControl: return "Right Control"
-        case .shift:        return "Shift (Any)"
+        case .shift:        return "Shift"
         case .leftShift:    return "Left Shift"
         case .rightShift:   return "Right Shift"
         case .fn:           return "Fn"
