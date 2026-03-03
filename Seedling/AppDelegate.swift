@@ -161,14 +161,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             controller.hideWindow()
         } else {
             log(.info, "Push to Talk released with text, triggering finish recording")
-            Task { @MainActor in
-                let success = await viewModel.finishRecordingAndCopy()
-                if success {
-                    try? await Task.sleep(nanoseconds: 300_000_000)
-                    controller.performAutoPasteIfEnabled()
-                }
-                controller.hideWindow()
-            }
+            controller.finishRecordingAndDismiss()
         }
     }
 
@@ -484,7 +477,6 @@ class ModifierKeyMonitor {
 // MARK: - Notification Names
 
 extension Notification.Name {
-    static let recordingStateChanged = Notification.Name("recordingStateChanged")
     static let globalHotkeyChanged = Notification.Name("globalHotkeyChanged")
     static let longPressConfigChanged = Notification.Name("longPressConfigChanged")
 }

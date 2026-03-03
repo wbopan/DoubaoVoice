@@ -17,13 +17,25 @@ Seedling is a macOS application for real-time speech-to-text transcription using
 
 ```
 Seedling/
-├── SeedlingApp.swift             # App entry point
-├── ContentView.swift             # Main UI
-├── TranscriptionViewModel.swift  # View model coordinator
-├── ASRClient.swift               # WebSocket ASR client
-├── AudioRecorder.swift           # Audio capture
-└── Utilities.swift               # Models, constants, extensions
+├── SeedlingApp.swift               # App entry point
+├── AppDelegate.swift               # Menu bar app coordinator, global hotkey, push-to-talk
+├── ContentView.swift               # Main settings/status UI
+├── FloatingWindow.swift            # Non-activating floating transcription panel
+├── SettingsWindow.swift            # Settings window tabs
+├── TranscriptionViewModel.swift    # View model coordinator
+├── ASRClient.swift                 # WebSocket ASR client (Seed ASR binary protocol)
+├── AudioRecorder.swift             # Audio capture with FFT level analysis
+├── AccessibilityTextCapture.swift  # AX API context capture from other apps
+├── ContextProcessor.swift          # Context text cleaning/truncation
+├── DocumentContentReader.swift     # File content reading for context
+├── AudioDeviceManager.swift        # Input device enumeration
+├── KeyboardShortcutNames.swift     # KeyboardShortcuts library bindings
+└── Utilities.swift                 # Models, constants, extensions
 ```
+
+## Xcode Project
+
+Uses folder-based file membership (no pbxproj references). Adding or deleting `.swift` files in `Seedling/` automatically includes/excludes them from the build.
 
 ## Logging System
 

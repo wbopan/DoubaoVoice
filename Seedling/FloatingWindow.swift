@@ -16,7 +16,6 @@ class FloatingWindowController: NSWindowController {
     private let settings = AppSettings.shared
     private var previousActiveApp: NSRunningApplication?
     private let logger = Logger.ui
-    private var capturedContext: CapturedTextContext?
 
     /// Calculate window position based on the selected mode
     static func calculateWindowPosition(mode: WindowPositionMode, windowSize: NSSize, settings: AppSettings) -> NSPoint {
@@ -177,49 +176,33 @@ class FloatingWindowController: NSWindowController {
             log(.debug, "Captured previous active app: \(app.localizedName ?? "Unknown")")
         }
 
-        // [Sync] Capture raw context BEFORE activating our window
-        // This must be synchronous because focus changes after window activation
-        capturedContext = nil
+        // [Sync] Capture raw context BEFORE showing our window
         let rawContext = performSynchronousCapture()
 
-        // Reset window to minimal size when showing
-        if let window = window {
-            let minSize = NSSize(width: 200, height: 70)
-            let currentOrigin = window.frame.origin
-
-            // Keep center position when resizing to minimum
-            let currentCenter = NSPoint(
-                x: currentOrigin.x + window.frame.width / 2,
-                y: currentOrigin.y + window.frame.height / 2
-            )
-
-            let newOrigin = NSPoint(
-                x: currentCenter.x - minSize.width / 2,
-                y: currentCenter.y - minSize.height / 2
-            )
-
-            window.setFrame(NSRect(origin: newOrigin, size: minSize), display: false)
-            log(.debug, "Reset window to minimal size: \(minSize)")
-        }
-
-        // Recalculate window position based on current mode (except for rememberLast)
-        if let window = window {
-            let mode = settings.windowPositionMode
-            // Only reposition if not in rememberLast mode
-            // In rememberLast mode, keep the window where it was last positioned
-            if mode != .rememberLast {
-                let position = Self.calculateWindowPosition(mode: mode, windowSize: window.frame.size, settings: settings)
-                window.setFrameOrigin(position)
-                log(.debug, "Repositioned window using mode \(mode.rawValue) at \(String(describing: position))")
-            } else {
-                log(.debug, "Using rememberLast mode, keeping window at current position")
-            }
-        }
-
-        // Ensure window is visible
         guard let window = window else {
             log(.error, "Window is nil in showWindow")
             return
+        }
+
+        // Reset window to minimal size when showing
+        let minSize = NSSize(width: 200, height: 70)
+        let currentCenter = NSPoint(
+            x: window.frame.origin.x + window.frame.width / 2,
+            y: window.frame.origin.y + window.frame.height / 2
+        )
+        let newOrigin = NSPoint(
+            x: currentCenter.x - minSize.width / 2,
+            y: currentCenter.y - minSize.height / 2
+        )
+        window.setFrame(NSRect(origin: newOrigin, size: minSize), display: false)
+        log(.debug, "Reset window to minimal size: \(minSize)")
+
+        // Recalculate window position based on current mode (except for rememberLast)
+        let mode = settings.windowPositionMode
+        if mode != .rememberLast {
+            let position = Self.calculateWindowPosition(mode: mode, windowSize: window.frame.size, settings: settings)
+            window.setFrameOrigin(position)
+            log(.debug, "Repositioned window using mode \(mode.rawValue) at \(String(describing: position))")
         }
 
         log(.debug, "Window exists, frame: \(window.frame)")
@@ -256,14 +239,12 @@ class FloatingWindowController: NSWindowController {
                     capturedAt: raw.capturedAt
                 )
 
-                capturedContext = processedContext
                 logger.debug("About to call setCapturedContext")
                 viewModel.setCapturedContext(processedContext)
                 logger.info("Context set, processed: \(processed.originalLength) -> \(processed.text.count) chars")
             } else {
                 // Clear previous context to avoid using stale data
                 logger.debug("No rawContext, clearing previous context")
-                capturedContext = nil
                 viewModel.setCapturedContext(nil)
             }
 
@@ -271,7 +252,6 @@ class FloatingWindowController: NSWindowController {
             logger.debug("About to call startRecording")
             if !viewModel.isRecording {
                 viewModel.startRecording()
-                NotificationCenter.default.post(name: .recordingStateChanged, object: nil)
             }
             logger.debug("Task completed")
         }
@@ -296,7 +276,6 @@ class FloatingWindowController: NSWindowController {
             if viewModel.isRecording {
                 log(.debug, "Stopping recording due to window hide")
                 viewModel.stopRecording()
-                NotificationCenter.default.post(name: .recordingStateChanged, object: nil)
             }
         }
     }
@@ -354,6 +333,18 @@ class FloatingWindowController: NSWindowController {
 
         log(.info, "No context captured from previous app")
         return nil
+    }
+
+    /// Finish recording, copy to clipboard, auto-paste, and dismiss the window
+    func finishRecordingAndDismiss() {
+        Task { @MainActor in
+            let success = await viewModel.finishRecordingAndCopy()
+            if success {
+                try? await Task.sleep(nanoseconds: 300_000_000) // 300ms for user to see "Copied"
+                performAutoPasteIfEnabled()
+            }
+            hideWindow()
+        }
     }
 
     func performAutoPasteIfEnabled() {
@@ -499,8 +490,8 @@ struct FloatingTranscriptionView: View {
 
             // Button area - waveform on left, buttons on right
             HStack {
-                // Waveform animation - only show when recording and connected
-                if viewModel.isRecording && !viewModel.isConnecting {
+                // Waveform animation - show as soon as recording starts (including connecting phase)
+                if viewModel.isRecording {
                     WaveformView(audioLevels: viewModel.audioLevels)
                         .padding(.leading, 20)
                         .transition(.opacity.combined(with: .scale(scale: 0.8)))
@@ -635,22 +626,7 @@ struct FloatingTranscriptionView: View {
     }
 
     private func finishRecording() {
-        Task {
-            let success = await viewModel.finishRecordingAndCopy()
-
-            // Give brief moment for user to see "Copied" status
-            if success {
-                try? await Task.sleep(nanoseconds: 300_000_000) // 300ms
-            }
-
-            // Perform auto-paste if enabled and copy succeeded
-            if success {
-                findController()?.performAutoPasteIfEnabled()
-            }
-
-            // Close window
-            closeWindow()
-        }
+        findController()?.finishRecordingAndDismiss()
     }
 }
 
