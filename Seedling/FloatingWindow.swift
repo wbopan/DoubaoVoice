@@ -17,6 +17,8 @@ class FloatingWindowController: NSWindowController {
     private var previousActiveApp: NSRunningApplication?
     private let logger = Logger.ui
 
+    private let capsuleHeight: CGFloat = 56
+
     /// Calculate window position based on the selected mode
     static func calculateWindowPosition(mode: WindowPositionMode, windowSize: NSSize, settings: AppSettings) -> NSPoint {
         log(.info, "Calculating window position for mode: \(mode.rawValue)")
@@ -92,9 +94,11 @@ class FloatingWindowController: NSWindowController {
     convenience init() {
         log(.debug, "FloatingWindowController init() starting")
 
-        // Create floating window (minimal initial size, non-activating)
+        let capsuleHeight: CGFloat = 56
+
+        // Create floating window (circle initial size, non-activating)
         let window = FloatingWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 200, height: 70),
+            contentRect: NSRect(x: 0, y: 0, width: capsuleHeight, height: capsuleHeight),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -184,18 +188,11 @@ class FloatingWindowController: NSWindowController {
             return
         }
 
-        // Reset window to minimal size when showing
-        let minSize = NSSize(width: 200, height: 70)
-        let currentCenter = NSPoint(
-            x: window.frame.origin.x + window.frame.width / 2,
-            y: window.frame.origin.y + window.frame.height / 2
-        )
-        let newOrigin = NSPoint(
-            x: currentCenter.x - minSize.width / 2,
-            y: currentCenter.y - minSize.height / 2
-        )
-        window.setFrame(NSRect(origin: newOrigin, size: minSize), display: false)
-        log(.debug, "Reset window to minimal size: \(minSize)")
+        // Reset window to circle size (left edge anchored)
+        let circleSize = NSSize(width: capsuleHeight, height: capsuleHeight)
+        let currentOrigin = window.frame.origin
+        window.setFrame(NSRect(origin: currentOrigin, size: circleSize), display: false)
+        log(.debug, "Reset window to circle size: \(circleSize)")
 
         // Recalculate window position based on current mode (except for rememberLast)
         let mode = settings.windowPositionMode
@@ -398,33 +395,6 @@ class FloatingWindow: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
-// MARK: - Circular Glass Button
-
-struct CircularGlassButton: View {
-    let systemName: String
-    let isAccent: Bool
-    let action: () -> Void
-
-    @State private var isPressed = false
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(isAccent ? .white : .primary)
-                .frame(width: 32, height: 32)
-                .background {
-                    if isAccent {
-                        Circle()
-                            .fill(Color.accentColor)
-                    }
-                }
-                .glassEffect(isAccent ? .clear : .regular, in: .circle)
-        }
-        .buttonStyle(.plain)
-    }
-}
-
 // MARK: - Waveform View
 
 struct WaveformView: View {
@@ -464,81 +434,74 @@ struct WaveformBar: View {
     }
 }
 
-// MARK: - Floating Transcription View
+// MARK: - Floating Transcription View (Capsule)
 
 struct FloatingTranscriptionView: View {
     @ObservedObject private var viewModel = TranscriptionViewModel.shared
-    @Namespace private var buttonNamespace
+    @State private var isHovering = false
+
+    private let capsuleHeight: CGFloat = 56
+    private let maxCapsuleWidth: CGFloat = 400
+    private let waveformZoneWidth: CGFloat = 40
+    private let submitZoneWidth: CGFloat = 36
+    private let horizontalPadding: CGFloat = 16
+
+    private var hasText: Bool {
+        !viewModel.transcribedText.isEmpty
+    }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Text area - auto expand height, no scrollbar
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(viewModel.transcribedText)
-                        .font(.system(size: 15))
-                        .textSelection(.enabled)
-                        .animation(.easeInOut(duration: 0.2), value: viewModel.transcribedText)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 20)
-                .padding(.top, 12)
-                .padding(.bottom, 4)
-            }
-            .scrollContentBackground(.hidden)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-            // Button area - waveform on left, buttons on right
-            HStack {
-                // Waveform animation - show as soon as recording starts (including connecting phase)
-                if viewModel.isRecording {
-                    WaveformView(audioLevels: viewModel.audioLevels)
-                        .padding(.leading, 20)
-                        .transition(.opacity.combined(with: .scale(scale: 0.8)))
-                }
-
-                Spacer()
-
-                GlassEffectContainer(spacing: 8) {
-                    HStack(spacing: 8) {
-                        if viewModel.isConnecting || viewModel.isProcessing {
-                            ProgressView()
-                                .controlSize(.small)
-                                .frame(width: 32, height: 32)
-                        } else {
-                            CircularGlassButton(
-                                systemName: "xmark",
-                                isAccent: false,
-                                action: closeWindow
-                            )
-                            .glassEffectID("close", in: buttonNamespace)
-                            .help("Close")
-
-                            if viewModel.isRecording && !viewModel.transcribedText.isEmpty {
-                                CircularGlassButton(
-                                    systemName: "arrow.up",
-                                    isAccent: true,
-                                    action: finishRecording
-                                )
-                                .glassEffectID("submit", in: buttonNamespace)
-                                .help("Done")
-                                .transition(.opacity)
-                            }
-                        }
+        HStack(spacing: 0) {
+            // Left zone: waveform or close button
+            leftZone
+                .frame(width: waveformZoneWidth, height: capsuleHeight)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    if isHovering {
+                        closeWindow()
                     }
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 4)
-                .padding(.bottom, 12)
+
+            // Center: text (only when text exists)
+            if hasText {
+                Text(viewModel.transcribedText)
+                    .font(.system(size: 15))
+                    .lineLimit(1)
+                    .truncationMode(.head)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .padding(.horizontal, 8)
             }
-            .animation(.easeInOut(duration: 0.2), value: viewModel.isRecording)
+
+            // Right zone: submit arrow (only when text exists and recording)
+            if hasText && viewModel.isRecording {
+                Image(systemName: "arrow.up")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 28, height: 28)
+                    .background(Circle().fill(Color.accentColor))
+                    .padding(.trailing, horizontalPadding)
+                    .contentShape(Circle())
+                    .onTapGesture {
+                        finishRecording()
+                    }
+                    .transition(.scale.combined(with: .opacity))
+            }
         }
-        .frame(minWidth: 150, minHeight: 70)
+        .padding(.leading, horizontalPadding)
+        .padding(.trailing, hasText && viewModel.isRecording ? 0 : horizontalPadding)
+        .frame(height: capsuleHeight)
+        .frame(minWidth: capsuleHeight)
         .background(.clear)
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 28))
-        .clipShape(RoundedRectangle(cornerRadius: 28))
+        .glassEffect(.regular, in: Capsule())
+        .clipShape(Capsule())
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovering = hovering
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: hasText)
+        .animation(.easeInOut(duration: 0.2), value: viewModel.isRecording)
         .onAppear {
-            // Adjust window size on initial appearance
             DispatchQueue.main.async {
                 adjustWindowSize()
             }
@@ -553,66 +516,84 @@ struct FloatingTranscriptionView: View {
         }
     }
 
+    // MARK: - Left Zone (waveform / close)
+
+    @ViewBuilder
+    private var leftZone: some View {
+        ZStack {
+            // Waveform (visible when not hovering and recording)
+            if viewModel.isRecording {
+                WaveformView(audioLevels: viewModel.audioLevels, compact: true)
+                    .opacity(isHovering ? 0 : 1)
+            }
+
+            // Processing spinner
+            if viewModel.isProcessing {
+                ProgressView()
+                    .controlSize(.small)
+                    .opacity(isHovering ? 0 : 1)
+            }
+
+            // Close icon (visible on hover)
+            Image(systemName: "xmark")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(.secondary)
+                .opacity(isHovering ? 1 : 0)
+        }
+        .animation(.easeInOut(duration: 0.15), value: isHovering)
+    }
+
+    // MARK: - Window Size
+
     private func adjustWindowSize() {
         guard let window = NSApp.windows.first(where: { $0 is FloatingWindow }) else { return }
 
         let text = viewModel.transcribedText
 
-        // Calculate text size (use single character placeholder if empty)
-        let displayText = text.isEmpty ? " " : text
+        if text.isEmpty {
+            // Circle mode: just the waveform
+            let circleSize = capsuleHeight
+            let currentFrame = window.frame
+            let newFrame = NSRect(
+                x: currentFrame.origin.x,
+                y: currentFrame.origin.y,
+                width: circleSize,
+                height: circleSize
+            )
+
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.25
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                window.animator().setFrame(newFrame, display: true)
+            }
+            return
+        }
+
+        // Capsule mode: calculate width based on text
         let font = NSFont.systemFont(ofSize: 15)
         let attributes: [NSAttributedString.Key: Any] = [.font: font]
+        let attributedString = NSAttributedString(string: text, attributes: attributes)
+        let textWidth = attributedString.size().width
 
-        // First, get the natural text width
-        let attributedString = NSAttributedString(string: displayText, attributes: attributes)
-        let naturalSize = attributedString.size()
+        // Total width = leading padding + waveform + text padding + text + text padding + submit button + trailing padding
+        let fixedWidth = horizontalPadding + waveformZoneWidth + 8 + 8 + submitZoneWidth + horizontalPadding
+        let desiredWidth = fixedWidth + textWidth
+        let finalWidth = min(max(desiredWidth, capsuleHeight + 60), maxCapsuleWidth)
 
-        // Define width constraints
-        let minWidth: CGFloat = 200
-        let maxWidth: CGFloat = 420 // 70% of original 600
-        let horizontalPadding: CGFloat = 56 // 40 for text (20 * 2) + 16 extra
-
-        // Calculate desired width based on text
-        let desiredTextWidth = min(max(naturalSize.width + 10, minWidth - horizontalPadding), maxWidth - horizontalPadding)
-        let finalWidth = desiredTextWidth + horizontalPadding
-
-        // Now calculate height with the determined width
-        let textRect = attributedString.boundingRect(
-            with: NSSize(width: desiredTextWidth, height: CGFloat.greatestFiniteMagnitude),
-            options: [.usesLineFragmentOrigin, .usesFontLeading]
-        )
-
-        let textHeight = ceil(textRect.height)
-        let buttonAreaHeight: CGFloat = 48 // 32 (button) + 4 (top padding) + 12 (bottom padding)
-        let textPadding: CGFloat = 16 // 12 (top) + 4 (bottom), horizontal is 20 per side
-
-        let maxTextHeight: CGFloat = 400
-        let constrainedTextHeight = min(textHeight, maxTextHeight)
-
-        let totalHeight = constrainedTextHeight + textPadding + buttonAreaHeight
-        let finalHeight = max(totalHeight, 70)
-
-        // Keep center position when resizing
         let currentFrame = window.frame
-        let centerX = currentFrame.origin.x + currentFrame.width / 2
-        let centerY = currentFrame.origin.y + currentFrame.height / 2
-
-        let newX = centerX - finalWidth / 2
-        let newY = centerY - finalHeight / 2
-
+        // Left edge anchored: keep origin.x, expand rightward
         let newFrame = NSRect(
-            x: newX,
-            y: newY,
+            x: currentFrame.origin.x,
+            y: currentFrame.origin.y,
             width: finalWidth,
-            height: finalHeight
+            height: capsuleHeight
         )
 
-        // Animate the resize
-        NSAnimationContext.runAnimationGroup({ context in
+        NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.2
             context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
             window.animator().setFrame(newFrame, display: true)
-        })
+        }
     }
 
     private func findController() -> FloatingWindowController? {
@@ -632,7 +613,7 @@ struct FloatingTranscriptionView: View {
 
 #Preview {
     FloatingTranscriptionView()
-        .frame(width: 400, height: 300)
+        .frame(width: 400, height: 80)
 }
 
 // MARK: - Notification Extensions
