@@ -249,6 +249,7 @@ class ModifierKeyMonitor {
     private var firstReleaseTime: Date?
     private var secondPressTime: Date?
     private var doubleTapTimeoutWorkItem: DispatchWorkItem?
+    private var lastMatchedKeyCode: UInt16?
 
     private let logger = Logger.hotkey
 
@@ -316,21 +317,36 @@ class ModifierKeyMonitor {
         secondPressTime = nil
         doubleTapTimeoutWorkItem?.cancel()
         doubleTapTimeoutWorkItem = nil
+        lastMatchedKeyCode = nil
     }
 
     private func handleFlagsChanged(_ event: NSEvent, source: String) {
         let flags = event.modifierFlags
+        let keyCode = event.keyCode
 
-        // Check if ONLY our target modifier is pressed (ignore combos)
+        // Determine if this event is for our target key using keyCode
+        let isTargetKeyCode = modifierKey.keyCodes.contains(keyCode)
+        let isTargetFlagActive = flags.contains(modifierKey.modifierFlag)
+
+        // Press = our key's keyCode AND the modifier flag is now active
+        let isTargetPressed = isTargetKeyCode && isTargetFlagActive
+        // Release = our key's keyCode AND the modifier flag is now inactive
+        let isTargetReleased = isTargetKeyCode && !isTargetFlagActive
+
+        // If this event is not about our target key at all, ignore it
+        if !isTargetPressed && !isTargetReleased {
+            return
+        }
+
+        // Check for other modifiers (abort if combo)
         let targetFlag = modifierKey.modifierFlag
         let otherModifiers: NSEvent.ModifierFlags = [.command, .option, .control, .shift, .function]
             .filter { $0 != targetFlag }
             .reduce(NSEvent.ModifierFlags()) { $0.union($1) }
 
-        let isTargetPressed = flags.contains(targetFlag)
         let hasOtherModifiers = !flags.intersection(otherModifiers).isEmpty
 
-        logger.debug("[\(source)] flagsChanged: target=\(isTargetPressed), otherMods=\(hasOtherModifiers), state=\(self.state.description)")
+        logger.debug("[\(source)] flagsChanged: keyCode=\(keyCode), pressed=\(isTargetPressed), released=\(isTargetReleased), otherMods=\(hasOtherModifiers), state=\(self.state.description)")
 
         // If other modifiers are pressed, abort any pending activation
         if hasOtherModifiers {
@@ -345,14 +361,15 @@ class ModifierKeyMonitor {
         switch state {
         case .idle:
             if isTargetPressed {
+                lastMatchedKeyCode = keyCode
                 if requireDoubleTap {
                     // First press detected — wait for double-tap sequence
-                    logger.debug("[\(source)] First press detected")
+                    logger.debug("[\(source)] First press detected (keyCode: \(keyCode))")
                     state = .firstPressDown
                     firstPressTime = Date()
                 } else {
                     // Simple hold mode — jump directly to hold detection
-                    logger.debug("[\(source)] Press detected, waiting for hold")
+                    logger.debug("[\(source)] Press detected (keyCode: \(keyCode)), waiting for hold")
                     state = .secondPressHeld
                     secondPressTime = Date()
 
@@ -363,7 +380,7 @@ class ModifierKeyMonitor {
             }
 
         case .firstPressDown:
-            if !isTargetPressed {
+            if isTargetReleased {
                 // First release - check if it was quick enough
                 guard let pressTime = firstPressTime else {
                     resetState()
@@ -394,6 +411,7 @@ class ModifierKeyMonitor {
 
         case .waitingForSecondPress:
             if isTargetPressed {
+                lastMatchedKeyCode = keyCode
                 // Second press detected
                 guard let releaseTime = firstReleaseTime else {
                     resetState()
@@ -419,11 +437,12 @@ class ModifierKeyMonitor {
                     resetState()
                     state = .firstPressDown
                     firstPressTime = Date()
+                    lastMatchedKeyCode = keyCode
                 }
             }
 
         case .secondPressHeld:
-            if !isTargetPressed {
+            if isTargetReleased {
                 // Released before activation threshold
                 let pressDuration = secondPressTime.map { Date().timeIntervalSince($0) } ?? 0
                 logger.debug("[\(source)] Second press released before activation (duration: \(String(format: "%.2f", pressDuration))s)")
@@ -431,7 +450,7 @@ class ModifierKeyMonitor {
             }
 
         case .activated:
-            if !isTargetPressed {
+            if isTargetReleased {
                 // Released after activation - trigger release callback
                 logger.info("[\(source)] Push to Talk release detected, triggering callback")
                 onRelease()

@@ -590,40 +590,93 @@ enum UserDefaultsKeys {
 
 /// Available modifier keys for long-press activation
 enum LongPressModifierKey: String, Codable, CaseIterable {
+    // "Any side" variants (original)
     case option
     case command
     case control
     case shift
     case fn
 
+    // Side-specific variants
+    case leftOption
+    case rightOption
+    case leftCommand
+    case rightCommand
+    case leftControl
+    case rightControl
+    case leftShift
+    case rightShift
+
     var displayName: String {
         switch self {
-        case .option: return "Option"
-        case .command: return "Command"
-        case .control: return "Control"
-        case .shift: return "Shift"
-        case .fn: return "Fn"
+        case .option:       return "Option (Any)"
+        case .leftOption:   return "Left Option"
+        case .rightOption:  return "Right Option"
+        case .command:      return "Command (Any)"
+        case .leftCommand:  return "Left Command"
+        case .rightCommand: return "Right Command"
+        case .control:      return "Control (Any)"
+        case .leftControl:  return "Left Control"
+        case .rightControl: return "Right Control"
+        case .shift:        return "Shift (Any)"
+        case .leftShift:    return "Left Shift"
+        case .rightShift:   return "Right Shift"
+        case .fn:           return "Fn"
         }
     }
 
     var symbol: String {
         switch self {
-        case .option: return "⌥"
-        case .command: return "⌘"
-        case .control: return "⌃"
-        case .shift: return "⇧"
-        case .fn: return "fn"
+        case .option, .leftOption, .rightOption:       return "⌥"
+        case .command, .leftCommand, .rightCommand:    return "⌘"
+        case .control, .leftControl, .rightControl:    return "⌃"
+        case .shift, .leftShift, .rightShift:          return "⇧"
+        case .fn:                                      return "fn"
         }
     }
 
     /// The NSEvent.ModifierFlags corresponding to this key
     var modifierFlag: NSEvent.ModifierFlags {
         switch self {
-        case .option: return .option
-        case .command: return .command
-        case .control: return .control
-        case .shift: return .shift
-        case .fn: return .function
+        case .option, .leftOption, .rightOption:       return .option
+        case .command, .leftCommand, .rightCommand:    return .command
+        case .control, .leftControl, .rightControl:    return .control
+        case .shift, .leftShift, .rightShift:          return .shift
+        case .fn:                                      return .function
+        }
+    }
+
+    /// Physical key codes for this modifier key.
+    /// "Any" variants include both left and right key codes;
+    /// side-specific variants include only one.
+    var keyCodes: Set<UInt16> {
+        switch self {
+        case .option:       return [58, 61]   // left + right option
+        case .leftOption:   return [58]
+        case .rightOption:  return [61]
+        case .command:      return [55, 54]   // left + right command
+        case .leftCommand:  return [55]
+        case .rightCommand: return [54]
+        case .control:      return [59, 62]   // left + right control
+        case .leftControl:  return [59]
+        case .rightControl: return [62]
+        case .shift:        return [56, 60]   // left + right shift
+        case .leftShift:    return [56]
+        case .rightShift:   return [60]
+        case .fn:           return [63]
+        }
+    }
+
+    /// Whether this variant is side-specific (left or right only)
+    var isSideSpecific: Bool {
+        switch self {
+        case .option, .command, .control, .shift, .fn:
+            return false
+        case .leftOption, .rightOption,
+             .leftCommand, .rightCommand,
+             .leftControl, .rightControl,
+             .leftShift, .rightShift:
+            return true
         }
     }
 }
