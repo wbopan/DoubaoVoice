@@ -45,25 +45,37 @@ class SettingsWindowController: NSWindowController {
 // MARK: - Settings Pane
 
 enum SettingsPane: String, CaseIterable, Identifiable {
-    case api, context, controls, about
+    case general, api, context, controls, about
 
     var id: String { rawValue }
 
     var label: String {
         switch self {
-        case .api: return "API"
-        case .context: return "Context"
+        case .general:  return "General"
+        case .api:      return "API"
+        case .context:  return "Context"
         case .controls: return "Controls"
-        case .about: return "About"
+        case .about:    return "About"
         }
     }
 
     var icon: String {
         switch self {
-        case .api: return "key.fill"
-        case .context: return "text.bubble"
+        case .general:  return "gearshape.fill"
+        case .api:      return "key.fill"
+        case .context:  return "text.bubble.fill"
         case .controls: return "command"
-        case .about: return "info.circle"
+        case .about:    return "info.circle.fill"
+        }
+    }
+
+    var iconColor: Color {
+        switch self {
+        case .general:  return .gray
+        case .api:      return .orange
+        case .context:  return .blue
+        case .controls: return .pink
+        case .about:    return .purple
         }
     }
 }
@@ -72,13 +84,24 @@ enum SettingsPane: String, CaseIterable, Identifiable {
 
 struct SettingsView: View {
     @ObservedObject private var settings = AppSettings.shared
-    @State private var selectedPane: SettingsPane = .api
+    @State private var selectedPane: SettingsPane = .general
 
     var body: some View {
         NavigationSplitView {
             List(SettingsPane.allCases, selection: $selectedPane) { pane in
-                Label(pane.label, systemImage: pane.icon)
-                    .tag(pane)
+                Label {
+                    Text(pane.label)
+                } icon: {
+                    Image(systemName: pane.icon)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.white)
+                        .frame(width: 24, height: 24)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(pane.iconColor.gradient)
+                        )
+                }
+                .tag(pane)
             }
             .navigationSplitViewColumnWidth(min: 160, ideal: 180, max: 220)
         } detail: {
@@ -94,6 +117,8 @@ struct SettingsView: View {
     @ViewBuilder
     private var detailView: some View {
         switch selectedPane {
+        case .general:
+            GeneralSettingsTab(settings: settings)
         case .api:
             APISettingsTab(settings: settings)
         case .context:
@@ -322,9 +347,9 @@ struct ContextCaptureSection: View {
     }
 }
 
-// MARK: - Controls Settings Tab
+// MARK: - General Settings Tab
 
-struct ControlsSettingsTab: View {
+struct GeneralSettingsTab: View {
     @ObservedObject var settings: AppSettings
     @ObservedObject private var deviceManager = AudioDeviceManager.shared
 
@@ -354,6 +379,50 @@ struct ControlsSettingsTab: View {
             }
 
             Section {
+                Picker("Glass tint:", selection: $settings.glassTintStyle) {
+                    ForEach(GlassTintStyle.allCases, id: \.self) { style in
+                        Text(style.displayName).tag(style)
+                    }
+                }
+
+                Picker("Window position:", selection: $settings.windowPositionMode) {
+                    ForEach(WindowPositionMode.allCases, id: \.self) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+
+                if settings.windowPositionMode == .topCenter || settings.windowPositionMode == .bottomCenter {
+                    HStack {
+                        Text("Edge margin:")
+
+                        Slider(
+                            value: $settings.screenEdgeMargin,
+                            in: 20...200,
+                            step: 10
+                        )
+
+                        Text("\(Int(settings.screenEdgeMargin))pt")
+                            .frame(width: 45)
+                            .monospacedDigit()
+                    }
+                }
+            } header: {
+                Text("Appearance")
+                    .font(.headline)
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+// MARK: - Controls Settings Tab
+
+struct ControlsSettingsTab: View {
+    @ObservedObject var settings: AppSettings
+
+    var body: some View {
+        Form {
+            Section {
                 HStack {
                     Text("Shortcut:")
                         .fixedSize()
@@ -382,17 +451,6 @@ struct ControlsSettingsTab: View {
                 Text("Automatically paste transcribed text into the previous application when using the finish action. Remove trailing punctuation removes both full-width and half-width punctuation marks from the end of the transcribed text.")
                     .font(.caption)
                     .foregroundColor(.secondary)
-            }
-
-            Section {
-                Picker("Window position:", selection: $settings.windowPositionMode) {
-                    ForEach(WindowPositionMode.allCases, id: \.self) { mode in
-                        Text(mode.displayName).tag(mode)
-                    }
-                }
-            } header: {
-                Text("Appearance")
-                    .font(.headline)
             }
         }
         .formStyle(.grouped)

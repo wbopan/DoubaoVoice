@@ -74,17 +74,17 @@ class FloatingWindowController: NSWindowController {
             return position
 
         case .topCenter:
-            // Horizontal center, near top with margin for menu bar and notch
+            // Horizontal center, near top with configurable margin
             let x = visibleFrame.origin.x + (visibleFrame.width - windowSize.width) / 2
-            let y = visibleFrame.maxY - windowSize.height - 50
+            let y = visibleFrame.maxY - windowSize.height - settings.screenEdgeMargin
             let position = NSPoint(x: x, y: y)
             log(.info, "Positioning at top center: \(String(describing: position))")
             return position
 
         case .bottomCenter:
-            // Horizontal center, near bottom with margin for Dock
+            // Horizontal center, near bottom with configurable margin
             let x = visibleFrame.origin.x + (visibleFrame.width - windowSize.width) / 2
-            let y = visibleFrame.minY + 50
+            let y = visibleFrame.minY + settings.screenEdgeMargin
             let position = NSPoint(x: x, y: y)
             log(.info, "Positioning at bottom center: \(String(describing: position))")
             return position
@@ -443,6 +443,7 @@ struct WaveformBar: View {
 
 struct FloatingTranscriptionView: View {
     @ObservedObject private var viewModel = TranscriptionViewModel.shared
+    @ObservedObject private var settings = AppSettings.shared
     @State private var isHovering = false
     @State private var displayedText = ""
     @State private var typewriterTimer: Timer?
@@ -455,6 +456,20 @@ struct FloatingTranscriptionView: View {
     private let submitZoneWidth: CGFloat = 28
     private let horizontalPadding: CGFloat = 6
     private let typewriterInterval: TimeInterval = 0.03
+
+    private var glassTintColor: Color? {
+        switch settings.glassTintStyle {
+        case .clear:  return nil
+        case .accent: return .accentColor
+        case .red:    return .red
+        case .orange: return .orange
+        case .yellow: return .yellow
+        case .green:  return .green
+        case .blue:   return .blue
+        case .purple: return .purple
+        case .pink:   return .pink
+        }
+    }
 
     private var hasText: Bool {
         !displayedText.isEmpty
@@ -526,9 +541,14 @@ struct FloatingTranscriptionView: View {
             }
         .frame(height: capsuleHeight)
         .frame(minWidth: capsuleHeight)
-        .background(.clear)
-        .glassEffect(.regular, in: Capsule())
+        .background {
+            if let color = glassTintColor {
+                Capsule().fill(color.opacity(0.85))
+            }
+        }
+        .glassEffect(glassTintColor != nil ? .clear : .regular, in: Capsule())
         .clipShape(Capsule())
+        .environment(\.colorScheme, glassTintColor != nil ? .dark : .light)
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.15)) {
                 isHovering = hovering

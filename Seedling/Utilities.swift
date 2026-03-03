@@ -69,7 +69,7 @@ struct ASRConfig: Sendable {
             "enable_ddc": true,
             "show_utterances": true,
             "enable_nonstream": true,
-            "end_window_size": 3000  // Trigger second pass after 3s silence
+            "end_window_size": 1000  // Trigger second pass after 1s silence
         ]
 
         // Add dialog context under corpus.context (per API documentation)
@@ -134,6 +134,33 @@ struct RecordingSession {
         self.text = text
         self.duration = duration
         self.timestamp = timestamp
+    }
+}
+
+/// Glass tint style for the floating window
+enum GlassTintStyle: String, Codable, CaseIterable {
+    case clear
+    case accent
+    case red
+    case orange
+    case yellow
+    case green
+    case blue
+    case purple
+    case pink
+
+    var displayName: String {
+        switch self {
+        case .clear:  return "Clear"
+        case .accent: return "Accent Color"
+        case .red:    return "Red"
+        case .orange: return "Orange"
+        case .yellow: return "Yellow"
+        case .green:  return "Green"
+        case .blue:   return "Blue"
+        case .purple: return "Purple"
+        case .pink:   return "Pink"
+        }
     }
 }
 
@@ -582,8 +609,13 @@ enum UserDefaultsKeys {
     // Microphone selection
     static let selectedMicrophoneUID = "Seedling.SelectedMicrophoneUID"
 
+    // Appearance
+    static let glassTintStyle = "Seedling.GlassTintStyle"
+    static let screenEdgeMargin = "Seedling.ScreenEdgeMargin"
+
     static let defaultPort = 18888
     static let defaultMaxContextLength = 2000
+    static let defaultScreenEdgeMargin: CGFloat = 160
 }
 
 // MARK: - Long-Press Modifier Key
@@ -796,6 +828,18 @@ class AppSettings: ObservableObject {
         didSet { defaults.set(selectedMicrophoneUID, forKey: UserDefaultsKeys.selectedMicrophoneUID) }
     }
 
+    @Published var glassTintStyle: GlassTintStyle {
+        didSet {
+            if let encoded = try? JSONEncoder().encode(glassTintStyle) {
+                defaults.set(encoded, forKey: UserDefaultsKeys.glassTintStyle)
+            }
+        }
+    }
+
+    @Published var screenEdgeMargin: CGFloat {
+        didSet { defaults.set(Double(screenEdgeMargin), forKey: UserDefaultsKeys.screenEdgeMargin) }
+    }
+
     private init() {
         // Load saved values or use defaults (from reference.py credentials)
         self.appKey = defaults.string(forKey: UserDefaultsKeys.appKey) ?? "3254061168"
@@ -843,6 +887,18 @@ class AppSettings: ObservableObject {
 
         // Load microphone selection (empty string = system default)
         self.selectedMicrophoneUID = defaults.string(forKey: UserDefaultsKeys.selectedMicrophoneUID) ?? ""
+
+        // Load appearance settings
+        if let tintData = defaults.data(forKey: UserDefaultsKeys.glassTintStyle),
+           let tint = try? JSONDecoder().decode(GlassTintStyle.self, from: tintData) {
+            self.glassTintStyle = tint
+        } else {
+            self.glassTintStyle = .clear
+        }
+        self.screenEdgeMargin = CGFloat(defaults.double(forKey: UserDefaultsKeys.screenEdgeMargin))
+        if self.screenEdgeMargin == 0 {
+            self.screenEdgeMargin = UserDefaultsKeys.defaultScreenEdgeMargin
+        }
 
         // Migrate: Remove deprecated resourceID setting
         if defaults.object(forKey: UserDefaultsKeys.resourceID) != nil {
