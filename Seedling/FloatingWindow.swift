@@ -337,7 +337,6 @@ class FloatingWindowController: NSWindowController {
         Task { @MainActor in
             let success = await viewModel.finishRecordingAndCopy()
             if success {
-                try? await Task.sleep(nanoseconds: 300_000_000) // 300ms for user to see "Copied"
                 performAutoPasteIfEnabled()
             }
             hideWindow()
@@ -350,8 +349,8 @@ class FloatingWindowController: NSWindowController {
 
         log(.info, "Performing auto-paste (previous app stays active)")
 
-        // Brief delay then simulate Cmd+V — previous app remains focused
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+        // Brief delay for pasteboard to settle, then simulate Cmd+V
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) { [weak self] in
             self?.simulatePasteKeystroke()
         }
     }

@@ -200,6 +200,7 @@ actor ASRClient {
     private var sequence: Int32 = 1
     private var isConnected = false
     private var receivedFinalResult = false
+    private var finalResultContinuation: CheckedContinuation<Void, Never>?
 
     // MARK: - Connection Management
 
@@ -251,6 +252,7 @@ actor ASRClient {
 
         isConnected = true
         receivedFinalResult = false
+        finalResultContinuation = nil
 
         // Start receiving responses
         Task {
@@ -268,6 +270,8 @@ actor ASRClient {
         // This ensures resources are released in all cases
         isConnected = false
         receivedFinalResult = false
+        finalResultContinuation?.resume()
+        finalResultContinuation = nil
         resultContinuation?.finish()
         resultContinuation = nil
 
@@ -324,37 +328,41 @@ actor ASRClient {
     }
 
     /// Wait for final result with timeout (1.5 seconds)
-    func waitForFinalResult(timeout: TimeInterval = 1.5) async -> ASRResult? {
+    func waitForFinalResult(timeout: TimeInterval = 1.5) async {
         log(.info, "Waiting for final result (timeout: \(timeout)s)...")
 
-        do {
-            return try await withThrowingTaskGroup(of: ASRResult?.self) { group in
-                // Task 1: Wait for final result
-                group.addTask { [weak self] in
-                    guard let self = self else { return nil }
-                    while await !self.receivedFinalResult {
-                        try await Task.sleep(nanoseconds: 100_000_000) // 100ms
-                    }
-                    log(.info, "Final result received")
-                    return nil
-                }
-
-                // Task 2: Timeout
-                group.addTask {
-                    try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
-                    log(.info, "Wait timeout reached")
-                    return nil
-                }
-
-                // Wait for first to complete
-                let result = try await group.next() ?? nil
-                group.cancelAll()
-                return result
-            }
-        } catch {
-            log(.warning, "Wait for final result interrupted: \(error)")
-            return nil
+        if receivedFinalResult {
+            log(.info, "Final result already received")
+            return
         }
+
+        // Schedule timeout to resume continuation if server doesn't respond in time
+        let timeoutTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+            await self?.timeoutFinalResultWait()
+        }
+
+        // Suspend until signaled by handleReceivedData, disconnect, or timeout.
+        // The closure runs synchronously on the actor before suspension,
+        // so there is no race with handleReceivedData.
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            if receivedFinalResult {
+                continuation.resume()
+            } else {
+                finalResultContinuation = continuation
+            }
+        }
+
+        timeoutTask.cancel()
+        finalResultContinuation = nil
+    }
+
+    /// Resume the final-result continuation on timeout
+    private func timeoutFinalResultWait() {
+        guard finalResultContinuation != nil else { return }
+        log(.info, "Wait timeout reached")
+        finalResultContinuation?.resume()
+        finalResultContinuation = nil
     }
 
     // MARK: - Result Stream
@@ -424,10 +432,12 @@ actor ASRClient {
         // Emit result to stream FIRST (fixes race condition)
         resultContinuation?.yield(result)
 
-        // THEN mark completion
+        // THEN mark completion and wake up waiter
         if result.isLastPackage {
             log(.info, "Received final result")
             receivedFinalResult = true
+            finalResultContinuation?.resume()
+            finalResultContinuation = nil
         }
     }
 }

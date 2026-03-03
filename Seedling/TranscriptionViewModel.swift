@@ -335,7 +335,7 @@ class TranscriptionViewModel: ObservableObject {
 
                     // Wait for final result
                     statusMessage = "Processing..."
-                    _ = await asrClient.waitForFinalResult()
+                    await asrClient.waitForFinalResult()
 
                     // Disconnect
                     await asrClient.disconnect()
