@@ -13,6 +13,8 @@ Seedling is a macOS application for real-time speech-to-text transcription using
 ./release.sh        # Build (Release) and install to /Applications
 ```
 
+**Gotcha**: `build.sh` may report success even when compilation fails (it checks for `.app` existence, which persists from previous successful builds). To verify a real build, check for `BUILD SUCCEEDED` in the xcodebuild output.
+
 ## Project Structure
 
 ```
@@ -20,8 +22,8 @@ Seedling/
 ├── SeedlingApp.swift               # App entry point
 ├── AppDelegate.swift               # Menu bar app coordinator, global hotkey, push-to-talk
 ├── ContentView.swift               # Main settings/status UI
-├── FloatingWindow.swift            # Non-activating floating transcription panel
-├── SettingsWindow.swift            # Settings window tabs
+├── FloatingWindow.swift            # Capsule-shaped floating transcription panel (Liquid Glass)
+├── SettingsWindow.swift            # Settings window with sidebar navigation
 ├── TranscriptionViewModel.swift    # View model coordinator
 ├── ASRClient.swift                 # WebSocket ASR client (Seed ASR binary protocol)
 ├── AudioRecorder.swift             # Audio capture with FFT level analysis
@@ -39,7 +41,7 @@ Uses folder-based file membership (no pbxproj references). Adding or deleting `.
 
 ## Logging System
 
-Use the global `log()` function defined in `Utilities.swift`. This outputs to stderr so logs appear in the terminal when running via `./run.sh`.
+Use the global `log()` function defined in `Utilities.swift`. This outputs to stderr so logs appear in the terminal when running the app.
 
 ```swift
 log(.debug, "Payload compressed: \(size) bytes")
