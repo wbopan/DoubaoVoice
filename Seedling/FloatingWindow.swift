@@ -17,7 +17,7 @@ class FloatingWindowController: NSWindowController {
     private var previousActiveApp: NSRunningApplication?
     private let logger = Logger.ui
 
-    private let capsuleHeight: CGFloat = 56
+    private let capsuleHeight: CGFloat = 40
 
     /// Calculate window position based on the selected mode
     static func calculateWindowPosition(mode: WindowPositionMode, windowSize: NSSize, settings: AppSettings) -> NSPoint {
@@ -94,7 +94,7 @@ class FloatingWindowController: NSWindowController {
     convenience init() {
         log(.debug, "FloatingWindowController init() starting")
 
-        let capsuleHeight: CGFloat = 56
+        let capsuleHeight: CGFloat = 40
 
         // Create floating window (circle initial size, non-activating)
         let window = FloatingWindow(
@@ -246,6 +246,12 @@ class FloatingWindowController: NSWindowController {
             }
 
             // Step 2: Start recording (context is now ready/cleared)
+            // Guard: only start if window is still visible (user may have released push-to-talk
+            // during async context processing, which would hide the window before we get here)
+            guard self.window?.isVisible == true else {
+                logger.info("Window no longer visible, skipping startRecording")
+                return
+            }
             logger.debug("About to call startRecording")
             if !viewModel.isRecording {
                 viewModel.startRecording()
@@ -438,22 +444,29 @@ struct WaveformBar: View {
 struct FloatingTranscriptionView: View {
     @ObservedObject private var viewModel = TranscriptionViewModel.shared
     @State private var isHovering = false
+    @State private var displayedText = ""
+    @State private var typewriterTimer: Timer?
+    @State private var currentMaxWidth: CGFloat = 0
+    @State private var reachedMaxWidth = false
 
-    private let capsuleHeight: CGFloat = 56
+    private let capsuleHeight: CGFloat = 40
     private let maxCapsuleWidth: CGFloat = 400
-    private let waveformZoneWidth: CGFloat = 40
-    private let submitZoneWidth: CGFloat = 36
-    private let horizontalPadding: CGFloat = 16
+    private let waveformZoneWidth: CGFloat = 28
+    private let submitZoneWidth: CGFloat = 28
+    private let horizontalPadding: CGFloat = 8
+    private let typewriterInterval: TimeInterval = 0.03
 
     private var hasText: Bool {
-        !viewModel.transcribedText.isEmpty
+        !displayedText.isEmpty
     }
 
     var body: some View {
         HStack(spacing: 0) {
-            // Left zone: waveform or close button
+            // Left zone: waveform or close button (never shrinks)
             leftZone
                 .frame(width: waveformZoneWidth, height: capsuleHeight)
+                .fixedSize()
+                .layoutPriority(1)
                 .contentShape(Rectangle())
                 .onTapGesture {
                     if isHovering {
@@ -461,23 +474,34 @@ struct FloatingTranscriptionView: View {
                     }
                 }
 
+            // Divider between waveform and text (always in layout, opacity controlled)
+            RoundedRectangle(cornerRadius: 0.5)
+                .fill(Color.primary.opacity(hasText ? 0.15 : 0))
+                .frame(width: 1, height: 16)
+
             // Center: text (only when text exists)
+            // Before max width: left-aligned (text grows rightward)
+            // After max width: right-aligned (newest text visible, left overflows)
             if hasText {
-                Text(viewModel.transcribedText)
-                    .font(.system(size: 15))
-                    .lineLimit(1)
-                    .truncationMode(.head)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-                    .padding(.horizontal, 8)
+                Color.clear
+                    .frame(maxWidth: .infinity)
+                    .overlay(alignment: reachedMaxWidth ? .trailing : .leading) {
+                        Text(displayedText)
+                            .font(.system(size: 14))
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
+                    .clipped()
+                    .padding(.horizontal, 6)
             }
 
             // Right zone: submit arrow (only when text exists and recording)
-            if hasText && viewModel.isRecording {
+            if !viewModel.transcribedText.isEmpty && viewModel.isRecording {
                 Image(systemName: "arrow.up")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 28, height: 28)
-                    .background(Circle().fill(Color.accentColor))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .frame(width: 24, height: 24)
+                    .background(Circle().fill(Color.primary.opacity(0.1)))
                     .padding(.trailing, horizontalPadding)
                     .contentShape(Circle())
                     .onTapGesture {
@@ -506,11 +530,18 @@ struct FloatingTranscriptionView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .floatingWindowDidShow)) { _ in
+            typewriterTimer?.invalidate()
+            displayedText = ""
+            currentMaxWidth = 0
+            reachedMaxWidth = false
             DispatchQueue.main.async {
                 adjustWindowSize()
             }
         }
         .onChange(of: viewModel.transcribedText) {
+            startTypewriter()
+        }
+        .onChange(of: displayedText) {
             adjustWindowSize()
         }
     }
@@ -544,54 +575,131 @@ struct FloatingTranscriptionView: View {
 
     // MARK: - Window Size
 
+    // MARK: - Typewriter Effect
+
+    private func startTypewriter() {
+        typewriterTimer?.invalidate()
+        let target = viewModel.transcribedText
+
+        // If target is shorter (ASR replaced text), snap immediately
+        if target.count < displayedText.count || !target.hasPrefix(displayedText) {
+            displayedText = target
+            return
+        }
+
+        // Already caught up
+        if displayedText == target { return }
+
+        // Pre-size window before first character to prevent layout flash
+        if displayedText.isEmpty && !target.isEmpty {
+            preExpandWindow(for: target)
+        }
+
+        // Reveal characters one by one
+        typewriterTimer = Timer.scheduledTimer(withTimeInterval: typewriterInterval, repeats: true) { [self] timer in
+            let target = viewModel.transcribedText
+
+            // Handle text replacement mid-typewriter
+            if target.count < displayedText.count || !target.hasPrefix(displayedText) {
+                displayedText = target
+                timer.invalidate()
+                return
+            }
+
+            if displayedText.count < target.count {
+                let nextIndex = target.index(target.startIndex, offsetBy: displayedText.count)
+                displayedText = String(target[...nextIndex])
+            } else {
+                timer.invalidate()
+            }
+        }
+    }
+
+    // MARK: - Window Size
+
+    /// Pre-expand window to minimum capsule width before first character appears
+    private func preExpandWindow(for text: String) {
+        guard let window = NSApp.windows.first(where: { $0 is FloatingWindow }) else { return }
+
+        let minCapsuleWidth = capsuleHeight + 60
+        let currentFrame = window.frame
+
+        let centerAnchored = {
+            let mode = AppSettings.shared.windowPositionMode
+            return mode == .topCenter || mode == .bottomCenter
+        }()
+
+        let newX = centerAnchored
+            ? currentFrame.midX - minCapsuleWidth / 2
+            : currentFrame.origin.x
+
+        window.setFrame(NSRect(
+            x: newX,
+            y: currentFrame.origin.y,
+            width: minCapsuleWidth,
+            height: capsuleHeight
+        ), display: true)
+    }
+
     private func adjustWindowSize() {
         guard let window = NSApp.windows.first(where: { $0 is FloatingWindow }) else { return }
 
-        let text = viewModel.transcribedText
+        let text = displayedText
+
+        let centerAnchored = {
+            let mode = AppSettings.shared.windowPositionMode
+            return mode == .topCenter || mode == .bottomCenter
+        }()
 
         if text.isEmpty {
-            // Circle mode: just the waveform
             let circleSize = capsuleHeight
             let currentFrame = window.frame
-            let newFrame = NSRect(
-                x: currentFrame.origin.x,
+            let newX = centerAnchored
+                ? currentFrame.midX - circleSize / 2
+                : currentFrame.origin.x
+            window.setFrame(NSRect(
+                x: newX,
                 y: currentFrame.origin.y,
                 width: circleSize,
                 height: circleSize
-            )
-
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.25
-                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                window.animator().setFrame(newFrame, display: true)
-            }
+            ), display: true)
             return
         }
 
         // Capsule mode: calculate width based on text
-        let font = NSFont.systemFont(ofSize: 15)
+        let font = NSFont.systemFont(ofSize: 14)
         let attributes: [NSAttributedString.Key: Any] = [.font: font]
         let attributedString = NSAttributedString(string: text, attributes: attributes)
         let textWidth = attributedString.size().width
 
-        // Total width = leading padding + waveform + text padding + text + text padding + submit button + trailing padding
-        let fixedWidth = horizontalPadding + waveformZoneWidth + 8 + 8 + submitZoneWidth + horizontalPadding
+        // divider (1) + padding around text (6+6)
+        let fixedWidth = horizontalPadding + waveformZoneWidth + 1 + 6 + 6 + submitZoneWidth + horizontalPadding
         let desiredWidth = fixedWidth + textWidth
-        let finalWidth = min(max(desiredWidth, capsuleHeight + 60), maxCapsuleWidth)
+        let candidateWidth = min(max(desiredWidth, capsuleHeight + 60), maxCapsuleWidth)
+
+        // Only grow, never shrink
+        let finalWidth = max(candidateWidth, currentMaxWidth)
+        guard finalWidth != window.frame.width else { return }
+        currentMaxWidth = finalWidth
+
+        if finalWidth >= maxCapsuleWidth && !reachedMaxWidth {
+            reachedMaxWidth = true
+        }
 
         let currentFrame = window.frame
-        // Left edge anchored: keep origin.x, expand rightward
-        let newFrame = NSRect(
-            x: currentFrame.origin.x,
-            y: currentFrame.origin.y,
-            width: finalWidth,
-            height: capsuleHeight
-        )
+        let newX = centerAnchored
+            ? currentFrame.midX - finalWidth / 2
+            : currentFrame.origin.x
 
         NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.2
-            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-            window.animator().setFrame(newFrame, display: true)
+            context.duration = 0.15
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            window.animator().setFrame(NSRect(
+                x: newX,
+                y: currentFrame.origin.y,
+                width: finalWidth,
+                height: capsuleHeight
+            ), display: true)
         }
     }
 
