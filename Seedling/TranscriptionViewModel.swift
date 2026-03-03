@@ -275,25 +275,21 @@ class TranscriptionViewModel: ObservableObject {
 
             } catch is CancellationError {
                 // User-initiated cancellation - silent cleanup, no error message
-                log(.info, "Recording start cancelled by user")
-                isASRConnected = false
-                preConnectionAudioBuffer.removeAll()
-                preConnectionBufferSize = 0
-                // Only clean up here if stopTask isn't already handling it
-                if recordingState != .stopping {
+                log(.info, "Recording start cancelled by user, state: \(recordingState)")
+                // Only clean up if no newer operation has taken over.
+                // .stopping = stopRecording() is handling cleanup
+                // .connecting = a newer startRecording() has already started
+                if recordingState != .stopping && recordingState != .connecting {
                     await performCleanup()
                     recordingState = .idle
+                    statusMessage = "Ready"
                 }
-                statusMessage = "Ready"
             } catch {
                 // Actual errors - show error message
-                errorMessage = "Failed to start recording: \(error.localizedDescription)"
-                statusMessage = "Error"
-                log(.error, "Start recording error: \(error)")
-                isASRConnected = false
-                preConnectionAudioBuffer.removeAll()
-                preConnectionBufferSize = 0
-                if recordingState != .stopping {
+                log(.error, "Start recording error: \(error), state: \(recordingState)")
+                if recordingState != .stopping && recordingState != .connecting {
+                    errorMessage = "Failed to start recording: \(error.localizedDescription)"
+                    statusMessage = "Error"
                     await performCleanup()
                     recordingState = .idle
                 }
@@ -362,12 +358,17 @@ class TranscriptionViewModel: ObservableObject {
                 statusMessage = "Ready"
             }
 
-            recordingState = .idle
-            audioActuallyStarted = false
-            isASRConnected = false
-            preConnectionAudioBuffer.removeAll()
-            preConnectionBufferSize = 0
-            audioLevels = [0, 0, 0, 0, 0]
+            // Only reset state if a newer startRecording() hasn't already taken over.
+            // A newer startRecording() sets recordingState = .connecting synchronously
+            // before this stopTask finishes, so check before clobbering.
+            if recordingState == .stopping {
+                recordingState = .idle
+                audioActuallyStarted = false
+                isASRConnected = false
+                preConnectionAudioBuffer.removeAll()
+                preConnectionBufferSize = 0
+                audioLevels = [0, 0, 0, 0, 0]
+            }
         }
     }
 

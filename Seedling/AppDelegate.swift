@@ -66,18 +66,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "waveform.circle.fill", accessibilityDescription: "Seedling")
+            button.image = NSImage(named: "MenuBarIcon")
             button.image?.isTemplate = true
         }
 
         // Create menu
         let menu = NSMenu()
 
-        menu.addItem(NSMenuItem(title: "Show Window", action: #selector(showWindow), keyEquivalent: ""))
-        menu.addItem(NSMenuItem.separator())
+        let openItem = NSMenuItem(title: "Open Seedling", action: #selector(showWindow), keyEquivalent: "")
+        openItem.image = NSImage(systemSymbolName: "mic", accessibilityDescription: nil)
+        menu.addItem(openItem)
         menu.addItem(NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ","))
-        menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q"))
+        let quitItem = NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q")
+        quitItem.image = NSImage(systemSymbolName: "xmark.circle", accessibilityDescription: nil)
+        menu.addItem(quitItem)
 
         statusItem.menu = menu
     }

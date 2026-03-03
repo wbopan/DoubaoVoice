@@ -8,14 +8,35 @@
 import AVFoundation
 import Foundation
 import CoreAudio
+import AudioToolbox
 import Accelerate
+
+// MARK: - HAL AudioUnit Callback Context
+
+/// Bridge object for passing state to the C-compatible HAL render callback.
+/// Accessed from the real-time audio thread — marked @unchecked Sendable because
+/// all properties are immutable after initialization.
+final class HALCaptureContext: @unchecked Sendable {
+    let audioUnit: AudioUnit
+    let format: AVAudioFormat
+    let continuation: AsyncStream<AVAudioPCMBuffer>.Continuation
+
+    nonisolated init(audioUnit: AudioUnit, format: AVAudioFormat, continuation: AsyncStream<AVAudioPCMBuffer>.Continuation) {
+        self.audioUnit = audioUnit
+        self.format = format
+        self.continuation = continuation
+    }
+}
 
 /// Audio recorder for capturing microphone input and streaming to ASR
 actor AudioRecorder {
     // MARK: - Properties
 
     private var audioEngine: AVAudioEngine?
+    private var halAudioUnit: AudioUnit?
+    private var halCaptureContext: HALCaptureContext?
     private var audioConverter: AVAudioConverter?
+    private var converterConfigured = false
     private var isRecording = false
     private var audioCallback: ((Data) -> Void)?
     private var audioLevelCallback: (([Float]) -> Void)?
@@ -69,6 +90,8 @@ actor AudioRecorder {
         self.audioCallback = callback
         self.audioLevelCallback = levelCallback
         self.segmentBuffer.removeAll()
+        self.audioConverter = nil
+        self.converterConfigured = false
 
         // Initialize FFT
         let halfSize = fftSize / 2
@@ -82,77 +105,16 @@ actor AudioRecorder {
         fftImagBuffer = [Float](repeating: 0, count: halfSize)
         fftMagnitudes = [Float](repeating: 0, count: halfSize)
 
-        // Create audio engine
-        let engine = AVAudioEngine()
-        self.audioEngine = engine
-
-        // Apply selected microphone device before accessing inputNode
+        // Route to the appropriate capture backend
         if !selectedMicrophoneUID.isEmpty,
            let deviceID = AudioDeviceManager.lookupDeviceID(forUID: selectedMicrophoneUID) {
-            var deviceIDVar = deviceID
-            let status = AudioUnitSetProperty(
-                engine.inputNode.audioUnit!,
-                kAudioOutputUnitProperty_CurrentDevice,
-                kAudioUnitScope_Global,
-                0,
-                &deviceIDVar,
-                UInt32(MemoryLayout<AudioDeviceID>.size)
-            )
-            if status == noErr {
-                log(.info, "Using microphone: \(selectedMicrophoneUID)")
-            } else {
-                log(.warning, "Failed to set microphone device (status: \(status)), using system default")
-            }
+            // Specific device: use standalone HAL AudioUnit (bypasses AVAudioEngine
+            // graph issues that occur when changing the device after initialization)
+            try startWithHALUnit(deviceID: deviceID, uid: selectedMicrophoneUID)
         } else {
-            log(.info, "Using system default microphone")
+            // System default: use AVAudioEngine (simpler, works reliably)
+            try startWithEngine()
         }
-
-        let inputNode = engine.inputNode
-        let inputFormat = inputNode.outputFormat(forBus: 0)
-
-        log(.info, "Input format: \(inputFormat.sampleRate)Hz, \(inputFormat.channelCount)ch")
-        log(.info, "Target format: \(targetFormat.sampleRate)Hz, \(targetFormat.channelCount)ch")
-
-        // Create converter if sample rates don't match
-        if inputFormat.sampleRate != targetFormat.sampleRate {
-            guard let converter = AVAudioConverter(from: inputFormat, to: targetFormat) else {
-                throw AudioRecorderError.conversionFailed
-            }
-            self.audioConverter = converter
-            log(.info, "Audio converter created: \(inputFormat.sampleRate)Hz → \(targetFormat.sampleRate)Hz")
-        } else {
-            self.audioConverter = nil
-            log(.info, "No conversion needed")
-        }
-
-        // Install tap on input node
-        let bufferSize = AVAudioFrameCount(inputFormat.sampleRate * ASRConstants.segmentDuration)
-
-        // Create AsyncStream with backpressure control to prevent Task explosion
-        // bufferingNewest(5) keeps only the latest 5 buffers, preventing memory buildup
-        let (stream, continuation) = AsyncStream<AVAudioPCMBuffer>.makeStream(
-            bufferingPolicy: .bufferingNewest(5)
-        )
-        self.audioBufferChannel = continuation
-
-        // Start a single processing Task instead of creating one per callback
-        processingTask = Task { [weak self] in
-            for await buffer in stream {
-                guard let self = self else { break }
-                guard await self.isRecording else { break }
-                await self.processAudioBuffer(buffer)
-            }
-        }
-
-        inputNode.installTap(onBus: 0, bufferSize: bufferSize, format: inputFormat) { [weak self] buffer, _ in
-            // Use yield instead of creating a new Task - this is non-blocking
-            // If buffer is full, bufferingNewest policy will drop oldest data
-            self?.audioBufferChannel?.yield(buffer)
-        }
-
-        // Prepare and start engine
-        engine.prepare()
-        try engine.start()
 
         isRecording = true
         log(.info, "Audio recording started")
@@ -169,17 +131,35 @@ actor AudioRecorder {
 
         isRecording = false
 
-        // Stop the audio buffer channel and processing task
+        // Stop capture backends FIRST (before tearing down the pipeline)
+        // so no new buffers arrive on a finished continuation.
+
+        // Stop HAL AudioUnit if used
+        if let au = halAudioUnit {
+            AudioOutputUnitStop(au)
+            AudioUnitUninitialize(au)
+            AudioComponentInstanceDispose(au)
+            halAudioUnit = nil
+            halCaptureContext = nil  // Safe: AudioUnit is stopped, no more callbacks
+            log(.info, "HAL AudioUnit stopped")
+        }
+
+        // Stop AVAudioEngine if used
+        if let engine = audioEngine {
+            engine.inputNode.removeTap(onBus: 0)
+            engine.stop()
+            audioEngine = nil
+            log(.info, "AVAudioEngine stopped")
+        }
+
+        // Now tear down the processing pipeline
         audioBufferChannel?.finish()
         audioBufferChannel = nil
         processingTask?.cancel()
         processingTask = nil
 
-        // Stop engine and remove tap
-        audioEngine?.inputNode.removeTap(onBus: 0)
-        audioEngine?.stop()
-        audioEngine = nil
         audioConverter = nil
+        converterConfigured = false
 
         // Send any remaining buffered data
         if !segmentBuffer.isEmpty {
@@ -205,7 +185,249 @@ actor AudioRecorder {
         log(.info, "Audio recording stopped")
     }
 
-    // MARK: - Private Methods
+    // MARK: - Capture Backends
+
+    /// Start capture using AVAudioEngine (system default device)
+    private func startWithEngine() throws {
+        let engine = AVAudioEngine()
+        self.audioEngine = engine
+
+        let inputNode = engine.inputNode
+        let inputFormat = inputNode.outputFormat(forBus: 0)
+
+        log(.info, "Engine input format: \(inputFormat.sampleRate)Hz, \(inputFormat.channelCount)ch")
+
+        let bufferSize = AVAudioFrameCount(inputFormat.sampleRate * ASRConstants.segmentDuration)
+
+        setupProcessingPipeline()
+
+        inputNode.installTap(onBus: 0, bufferSize: bufferSize, format: inputFormat) { [weak self] buffer, _ in
+            self?.audioBufferChannel?.yield(buffer)
+        }
+
+        engine.prepare()
+        try engine.start()
+
+        log(.info, "AVAudioEngine started with system default device")
+    }
+
+    /// Start capture using a standalone HAL AudioUnit (specific device).
+    /// This bypasses AVAudioEngine entirely, avoiding the internal graph format
+    /// corruption that occurs when changing the device via AudioUnitSetProperty
+    /// on AVAudioEngine's input node.
+    private func startWithHALUnit(deviceID: AudioDeviceID, uid: String) throws {
+        // 1. Find HAL Output audio component
+        var desc = AudioComponentDescription(
+            componentType: kAudioUnitType_Output,
+            componentSubType: kAudioUnitSubType_HALOutput,
+            componentManufacturer: kAudioUnitManufacturer_Apple,
+            componentFlags: 0,
+            componentFlagsMask: 0
+        )
+        guard let component = AudioComponentFindNext(nil, &desc) else {
+            log(.error, "HAL Output audio component not found")
+            throw AudioRecorderError.recordingFailed
+        }
+
+        var audioUnit: AudioUnit?
+        var status = AudioComponentInstanceNew(component, &audioUnit)
+        guard status == noErr, let au = audioUnit else {
+            log(.error, "Failed to create HAL AudioUnit: \(status)")
+            throw AudioRecorderError.recordingFailed
+        }
+
+        // 2. Enable input on element 1
+        var enableIO: UInt32 = 1
+        status = AudioUnitSetProperty(
+            au, kAudioOutputUnitProperty_EnableIO,
+            kAudioUnitScope_Input, 1,
+            &enableIO, UInt32(MemoryLayout<UInt32>.size)
+        )
+        guard status == noErr else {
+            log(.error, "Failed to enable HAL input: \(status)")
+            AudioComponentInstanceDispose(au)
+            throw AudioRecorderError.recordingFailed
+        }
+
+        // 3. Disable output on element 0 (we don't play audio)
+        var disableIO: UInt32 = 0
+        status = AudioUnitSetProperty(
+            au, kAudioOutputUnitProperty_EnableIO,
+            kAudioUnitScope_Output, 0,
+            &disableIO, UInt32(MemoryLayout<UInt32>.size)
+        )
+        guard status == noErr else {
+            log(.error, "Failed to disable HAL output: \(status)")
+            AudioComponentInstanceDispose(au)
+            throw AudioRecorderError.recordingFailed
+        }
+
+        // 4. Set the capture device
+        var deviceIDVar = deviceID
+        status = AudioUnitSetProperty(
+            au, kAudioOutputUnitProperty_CurrentDevice,
+            kAudioUnitScope_Global, 0,
+            &deviceIDVar, UInt32(MemoryLayout<AudioDeviceID>.size)
+        )
+        guard status == noErr else {
+            log(.error, "Failed to set HAL device \(deviceID): \(status)")
+            AudioComponentInstanceDispose(au)
+            throw AudioRecorderError.recordingFailed
+        }
+        log(.info, "HAL device set: \(uid) (deviceID=\(deviceID))")
+
+        // 5. Get the device's native input format
+        var hwASBD = AudioStreamBasicDescription()
+        var hwASBDSize = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
+        let hwStatus = AudioUnitGetProperty(
+            au, kAudioUnitProperty_StreamFormat,
+            kAudioUnitScope_Input, 1,
+            &hwASBD, &hwASBDSize
+        )
+        guard hwStatus == noErr, hwASBD.mSampleRate > 0 else {
+            log(.error, "Failed to get HAL hardware format: \(hwStatus)")
+            AudioComponentInstanceDispose(au)
+            throw AudioRecorderError.recordingFailed
+        }
+        log(.info, "HAL hardware format: \(hwASBD.mSampleRate)Hz, \(hwASBD.mChannelsPerFrame)ch, \(hwASBD.mBitsPerChannel)bit")
+
+        // 6. Set output format: mono float32 at device sample rate
+        //    The HAL unit will do the channel mixing internally
+        var outputASBD = AudioStreamBasicDescription(
+            mSampleRate: hwASBD.mSampleRate,
+            mFormatID: kAudioFormatLinearPCM,
+            mFormatFlags: kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked | kAudioFormatFlagIsNonInterleaved,
+            mBytesPerPacket: 4,
+            mFramesPerPacket: 1,
+            mBytesPerFrame: 4,
+            mChannelsPerFrame: 1,
+            mBitsPerChannel: 32,
+            mReserved: 0
+        )
+        status = AudioUnitSetProperty(
+            au, kAudioUnitProperty_StreamFormat,
+            kAudioUnitScope_Output, 1,
+            &outputASBD, UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
+        )
+        guard status == noErr else {
+            log(.error, "Failed to set HAL output format: \(status)")
+            AudioComponentInstanceDispose(au)
+            throw AudioRecorderError.recordingFailed
+        }
+        log(.info, "HAL output format: \(outputASBD.mSampleRate)Hz, 1ch, float32")
+
+        // 6b. Set device buffer size large enough for FFT (2048 frames at 16kHz
+        //     = ~6144 frames at 48kHz). Use the same duration as AVAudioEngine path.
+        var desiredFrames = UInt32(hwASBD.mSampleRate * ASRConstants.segmentDuration)
+        var bufferSizeAddr = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyBufferFrameSize,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        let bsStatus = AudioObjectSetPropertyData(
+            deviceID, &bufferSizeAddr, 0, nil,
+            UInt32(MemoryLayout<UInt32>.size), &desiredFrames
+        )
+        if bsStatus == noErr {
+            log(.info, "HAL buffer size set to \(desiredFrames) frames")
+        } else {
+            log(.warning, "Failed to set HAL buffer size (status: \(bsStatus)), waveform may not animate")
+        }
+
+        // Also tell the audio unit the max frames it may receive per slice
+        AudioUnitSetProperty(
+            au, kAudioUnitProperty_MaximumFramesPerSlice,
+            kAudioUnitScope_Global, 0,
+            &desiredFrames, UInt32(MemoryLayout<UInt32>.size)
+        )
+
+        // 7. Create AVAudioFormat for the processing pipeline
+        guard let format = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: outputASBD.mSampleRate,
+            channels: 1,
+            interleaved: false
+        ) else {
+            AudioComponentInstanceDispose(au)
+            throw AudioRecorderError.conversionFailed
+        }
+
+        // 8. Set up processing pipeline (AsyncStream + processing Task)
+        setupProcessingPipeline()
+
+        // 9. Set up render callback
+        guard let continuation = audioBufferChannel else {
+            log(.error, "Failed to set up audio processing pipeline")
+            AudioComponentInstanceDispose(au)
+            throw AudioRecorderError.recordingFailed
+        }
+        let context = HALCaptureContext(
+            audioUnit: au, format: format, continuation: continuation
+        )
+        self.halCaptureContext = context
+
+        var callbackStruct = AURenderCallbackStruct(
+            inputProc: { (inRefCon, ioActionFlags, inTimeStamp, inBusNumber, inNumberFrames, ioData) -> OSStatus in
+                let ctx = Unmanaged<HALCaptureContext>.fromOpaque(inRefCon).takeUnretainedValue()
+                guard let buffer = AVAudioPCMBuffer(pcmFormat: ctx.format, frameCapacity: inNumberFrames) else {
+                    return kAudioUnitErr_FailedInitialization
+                }
+                buffer.frameLength = inNumberFrames
+                let status = AudioUnitRender(ctx.audioUnit, ioActionFlags, inTimeStamp, 1, inNumberFrames, buffer.mutableAudioBufferList)
+                guard status == noErr else { return status }
+                ctx.continuation.yield(buffer)
+                return noErr
+            },
+            inputProcRefCon: Unmanaged.passUnretained(context).toOpaque()
+        )
+        status = AudioUnitSetProperty(
+            au, kAudioOutputUnitProperty_SetInputCallback,
+            kAudioUnitScope_Global, 0,
+            &callbackStruct, UInt32(MemoryLayout<AURenderCallbackStruct>.size)
+        )
+        guard status == noErr else {
+            log(.error, "Failed to set HAL input callback: \(status)")
+            AudioComponentInstanceDispose(au)
+            throw AudioRecorderError.recordingFailed
+        }
+
+        // 10. Initialize and start
+        status = AudioUnitInitialize(au)
+        guard status == noErr else {
+            log(.error, "Failed to initialize HAL AudioUnit: \(status)")
+            AudioComponentInstanceDispose(au)
+            throw AudioRecorderError.recordingFailed
+        }
+
+        status = AudioOutputUnitStart(au)
+        guard status == noErr else {
+            log(.error, "Failed to start HAL AudioUnit: \(status)")
+            AudioUnitUninitialize(au)
+            AudioComponentInstanceDispose(au)
+            throw AudioRecorderError.recordingFailed
+        }
+
+        self.halAudioUnit = au
+        log(.info, "HAL AudioUnit started successfully")
+    }
+
+    /// Set up the shared AsyncStream processing pipeline
+    private func setupProcessingPipeline() {
+        let (stream, continuation) = AsyncStream<AVAudioPCMBuffer>.makeStream(
+            bufferingPolicy: .bufferingNewest(5)
+        )
+        self.audioBufferChannel = continuation
+
+        processingTask = Task { [weak self] in
+            for await buffer in stream {
+                guard let self = self else { break }
+                guard await self.isRecording else { break }
+                await self.processAudioBuffer(buffer)
+            }
+        }
+    }
+
+    // MARK: - Audio Processing
 
     /// Compute 5 frequency band levels from PCM samples using real FFT (vDSP_fft_zrip)
     /// Returns normalized levels [0..1] for speech-focused frequency bands
@@ -313,6 +535,30 @@ actor AudioRecorder {
 
     private func processAudioBuffer(_ buffer: AVAudioPCMBuffer) {
         guard isRecording else { return }
+
+        // Lazy converter setup from actual buffer format (first buffer only)
+        if !converterConfigured {
+            let bufferFormat = buffer.format
+            log(.info, "Actual buffer format: \(bufferFormat.sampleRate)Hz, \(bufferFormat.channelCount)ch, frames=\(buffer.frameLength)")
+
+            let needsConversion = bufferFormat.sampleRate != targetFormat.sampleRate
+                || bufferFormat.commonFormat != targetFormat.commonFormat
+                || bufferFormat.channelCount != targetFormat.channelCount
+
+            if needsConversion {
+                if let converter = AVAudioConverter(from: bufferFormat, to: targetFormat) {
+                    self.audioConverter = converter
+                    log(.info, "Audio converter created: \(bufferFormat.sampleRate)Hz \(bufferFormat.channelCount)ch → \(targetFormat.sampleRate)Hz \(targetFormat.channelCount)ch")
+                } else {
+                    log(.error, "Failed to create audio converter from \(bufferFormat) to \(targetFormat)")
+                    return
+                }
+            } else {
+                self.audioConverter = nil
+                log(.info, "No audio conversion needed")
+            }
+            converterConfigured = true
+        }
 
         // Convert audio if needed
         let convertedBuffer: AVAudioPCMBuffer
